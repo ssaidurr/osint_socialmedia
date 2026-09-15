@@ -1,0 +1,139 @@
+"""OSINT Social Media Monitor — command line.
+
+    python main.py run            collect + analyze + check threshold (+ email ticket)
+    python main.py run --dry-run  same, but never send email
+    python main.py watch          repeat `run` every watch.interval_minutes
+    python main.py report         negative-news analytics in the terminal
+    python main.py test-email     send a test email to verify SMTP settings
+"""
+from __future__ import annotations
+
+import argparse
+import logging
+import time
+
+from osint import db
+from osint.alerts import category_label, check_and_alert, send_test_email
+from osint.analyzer import analyze_pending
+from osint.collectors import collect_all
+from osint.config import load_config, to_local
+
+
+def collect(conn, cfg) -> None:
+    items, per_source = collect_all(cfg, conn)
+    for name, n in per_source.items():
+        print(f"  {name:<34} {n}")
+    print(f"Collected {len(items)} items, {db.insert_items(conn, items)} new")
+
+
+def analyze(conn, cfg, redo: bool = False) -> None:
+    if redo:
+        print(f"Re-analyzing {db.reset_analysis(conn, 'lexicon')} lexicon-analyzed items")
+    while True:  # one pass handles analyzer.max_items_per_run items; keep going until none are pending
+        c = analyze_pending(conn, cfg)
+        if not c["analyzed"]:
+            break
+        print(f"Analyzed {c['analyzed']} items (provider: {c['provider']}; "
+              f"LLM {c['by_llm']}, lexicon {c['by_lexicon']})")
+        if not redo:
+            break
+
+
+def check(conn, cfg, dry_run: bool) -> None:
+    d = check_and_alert(conn, cfg, dry_run=dry_run)
+    s = d["stats"]
+    print(f"Last {cfg['alert']['window_hours']}h: {s['negative']}/{s['total']} negative "
+          f"({s['ratio']:.0%}), threshold {cfg['alert']['negative_ratio_threshold']:.0%}")
+    if not d["triggered"]:
+        print(f"No ticket: {d['reason']}")
+        return
+    t = d["ticket"]
+    print(f"TICKET {t['id']} [{t['level']}] — status: {t['status']}")
+    print(f"  {t['subject']}")
+    print(f"  report: {t['report_path']}")
+    if t.get("error"):
+        print(f"  {t['error']}")
+
+
+def run(conn, cfg, dry_run: bool) -> None:
+    print("── collect"); collect(conn, cfg)
+    print("── analyze"); analyze(conn, cfg)
+    print("── check");   check(conn, cfg, dry_run)
+    if days := cfg.get("retention_days"):
+        if n := db.prune(conn, days):
+            print(f"── pruned {n} items collected more than {days} days ago")
+
+
+def report(conn, cfg, hours: float) -> None:
+    s = db.window_stats(conn, db.hours_ago(hours))
+    print(f"Last {hours:g}h: {s['total']} analyzed items — negative {s['negative']} ({s['ratio']:.0%}), "
+          f"neutral {s['neutral']}, positive {s['positive']}, avg negative severity {s['avg_severity']:.1f}/5")
+    if s["negative"]:
+        print("\nNegative news by type:")
+        top = max(s["categories"].values())
+        for k, n in s["categories"].items():
+            print(f"  {category_label(k):<48} {'█' * max(1, round(24 * n / top)):<24} {n:>4} ({n / s['negative']:.0%})")
+        print("\nMost severe:")
+        for it in db.top_negative(conn, s["since"], 8):
+            print(f"  [{it['severity']}] {(it['title'] or it['text'])[:90]} — {it['source']}")
+    tickets = db.recent_tickets(conn, 5)
+    if tickets:
+        print("\nRecent tickets:")
+        for t in tickets:
+            print(f"  {t['id']}  {t['level']:<8} {t['ratio']:.0%}  {t['status']:<8} {to_local(t['created_at'], cfg)}")
+
+
+def main() -> None:
+    p = argparse.ArgumentParser(description="OSINT social media & news monitor")
+    p.add_argument("--config", help="path to config.yaml")
+    p.add_argument("-v", "--verbose", action="store_true")
+    sub = p.add_subparsers(dest="cmd", required=True)
+    sub.add_parser("collect")
+    ap = sub.add_parser("analyze")
+    ap.add_argument("--redo", action="store_true",
+                    help="re-analyze items the lexicon handled (after adding ANTHROPIC_API_KEY or editing keywords)")
+    for name in ("check", "run", "watch"):
+        sp = sub.add_parser(name)
+        sp.add_argument("--dry-run", action="store_true", help="create the ticket report but do not email it")
+        if name == "watch":
+            sp.add_argument("--interval", type=float, help="minutes between runs")
+    rp = sub.add_parser("report")
+    rp.add_argument("--hours", type=float, default=24)
+    sub.add_parser("test-email")
+    args = p.parse_args()
+
+    logging.basicConfig(level=logging.INFO if args.verbose else logging.WARNING,
+                        format="%(levelname)s %(name)s: %(message)s")
+    cfg = load_config(args.config)
+    conn = db.connect()
+
+    if args.cmd == "collect":
+        collect(conn, cfg)
+    elif args.cmd == "analyze":
+        analyze(conn, cfg, args.redo)
+    elif args.cmd == "check":
+        check(conn, cfg, args.dry_run)
+    elif args.cmd == "run":
+        run(conn, cfg, args.dry_run)
+    elif args.cmd == "report":
+        report(conn, cfg, args.hours)
+    elif args.cmd == "test-email":
+        send_test_email(cfg)
+        print(f"Test email sent to {', '.join(cfg['alert']['recipients'])}")
+    elif args.cmd == "watch":
+        interval = args.interval or cfg.get("watch", {}).get("interval_minutes", 30)
+        print(f"Watching every {interval:g} min — Ctrl+C to stop")
+        try:
+            while True:
+                print(f"\n=== {to_local(db.now_utc(), cfg)} ===")
+                try:
+                    run(conn, cfg, args.dry_run)
+                except Exception as e:  # one bad cycle must not kill the watcher
+                    logging.exception("run failed: %s", e)
+                time.sleep(interval * 60)
+        except KeyboardInterrupt:
+            print("\nStopped")
+
+
+if __name__ == "__main__":
+    main()

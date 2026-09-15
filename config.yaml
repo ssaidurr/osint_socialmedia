@@ -1,0 +1,64 @@
+# ─── OSINT Social Media Monitor — configuration ───────────────────────────────
+# Secrets (API key, SMTP password) go in .env, not here.
+
+timezone: Asia/Dhaka          # used for display in emails and the dashboard
+retention_days: 30            # items older than this are deleted so the database stays small (matters on GitHub)
+
+# Google News search. Each query is searched for news from the last `window`.
+google_news:
+  country: BD
+  window: 1d
+  queries:
+    - { query: "Bangladesh", lang: en }
+    - { query: "বাংলাদেশ", lang: bn }
+    # - { query: "Dhaka", lang: en }
+    # - { query: "আপনার ব্র্যান্ড/কোম্পানির নাম", lang: bn }
+
+# Direct RSS feeds from news sites
+rss_feeds:
+  - { name: "Prothom Alo", url: "https://www.prothomalo.com/feed/" }
+  - { name: "The Daily Star", url: "https://www.thedailystar.net/frontpage/rss.xml" }
+
+# Public Reddit posts + latest comments (no login needed)
+reddit:
+  subreddits: [bangladesh, dhaka]
+  include_comments: true
+
+# YouTube videos + comments. Needs YOUTUBE_API_KEY in .env (free, Google Cloud Console).
+# Skipped automatically when no key is set.
+# Free quota: search.list is capped at 100 calls/day and every run uses one call per query,
+# so YouTube only runs every `every_minutes` (2 queries x 24 runs = 48 calls/day).
+youtube:
+  queries: ["Bangladesh news", "বাংলাদেশ খবর"]
+  max_results: 15
+  comments_per_video: 20
+  lookback_hours: 24
+  every_minutes: 60
+
+analyzer:
+  provider: auto              # auto = Gemini if GEMINI_API_KEY is set, else Claude if ANTHROPIC_API_KEY,
+                              # else lexicon. gemini | claude | lexicon to force one.
+  gemini_model: gemini-3.5-flash-lite      # free tier; try gemini-3.5-flash for better accuracy
+  gemini_min_seconds_between_requests: 6   # free tier allows only a few requests per minute
+  claude_model: claude-opus-5
+  claude_effort: low          # low is enough for classification; raise if accuracy is poor
+  batch_size: 25
+  max_items_per_run: 500
+
+# ─── Ticket / email alert ─────────────────────────────────────────────────────
+# A ticket is created (and emailed) when, within the last `window_hours`:
+#   total analyzed items >= min_items
+#   AND negative share   >= negative_ratio_threshold
+#   AND negative items   >= min_negative_count
+alert:
+  recipients: [ffoisall@gmail.com]
+  window_hours: 6
+  min_items: 20
+  negative_ratio_threshold: 0.40
+  min_negative_count: 10
+  cooldown_hours: 6           # no repeat ticket within this time...
+  escalation_delta: 0.15      # ...unless the negative share rose by this much since the last ticket
+  top_items_in_email: 10
+
+watch:
+  interval_minutes: 30
