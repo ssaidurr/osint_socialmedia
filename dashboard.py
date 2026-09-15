@@ -40,24 +40,28 @@ REMOTE_REPO = _secret("GITHUB_DATA_REPO")  # "owner/repo"
 
 
 @st.cache_data(ttl=300)
-def fetch_remote(path: str) -> bytes | None:
+def fetch_remote(path: str) -> tuple[bytes | None, int]:
+    """Returns (content, HTTP status); content is None unless the file was found. Status 0 = network error."""
     headers = {"Accept": "application/vnd.github.raw+json"}
     if token := _secret("GITHUB_TOKEN"):  # required for private repos
         headers["Authorization"] = f"Bearer {token}"
-    r = requests.get(f"https://api.github.com/repos/{REMOTE_REPO}/contents/{path}", headers=headers,
-                     params={"ref": _secret("GITHUB_DATA_BRANCH") or "data"}, timeout=30)
-    if r.status_code == 404:
-        return None
-    r.raise_for_status()
-    return r.content
+    try:
+        r = requests.get(f"https://api.github.com/repos/{REMOTE_REPO}/contents/{path}", headers=headers,
+                         params={"ref": _secret("GITHUB_DATA_BRANCH") or "data"}, timeout=30)
+    except requests.RequestException:
+        return None, 0
+    return (r.content if r.status_code == 200 else None), r.status_code
 
 
 @st.cache_data(ttl=60)
-def load() -> tuple[pd.DataFrame, pd.DataFrame]:
-    if REMOTE_REPO and (content := fetch_remote("data/osint.db")):
-        db.DB_PATH.parent.mkdir(exist_ok=True)
-        db.DB_PATH.write_bytes(content)
+def load() -> tuple[pd.DataFrame, pd.DataFrame, int]:
+    if REMOTE_REPO:
+        content, _ = fetch_remote("data/osint.db")
+        if content:
+            db.DB_PATH.parent.mkdir(exist_ok=True)
+            db.DB_PATH.write_bytes(content)
     conn = db.connect()
+    collected = conn.execute("SELECT COUNT(*) FROM items").fetchone()[0]
     items = pd.read_sql_query("SELECT * FROM items WHERE sentiment IS NOT NULL", conn)
     tickets = pd.read_sql_query("SELECT * FROM tickets ORDER BY created_at DESC", conn)
     conn.close()
@@ -65,14 +69,34 @@ def load() -> tuple[pd.DataFrame, pd.DataFrame]:
     items["ts"] = pd.to_datetime(items["ts"], utc=True, format="ISO8601").dt.tz_convert(TZ).dt.tz_localize(None)
     items["category_label"] = items["category"].map(CATEGORIES)
     tickets["created"] = pd.to_datetime(tickets["created_at"], utc=True, format="ISO8601").dt.tz_convert(TZ).dt.tz_localize(None)
-    return items, tickets
+    return items, tickets, collected
 
 
-items, tickets = load()
+items, tickets, collected = load()
 st.title("📡 OSINT Negative News Monitor")
 
 if items.empty:
-    st.info("No analyzed data yet. Run `python main.py run` first, then refresh.")
+    # Say exactly why there's nothing to show — the fix differs for each case
+    status = fetch_remote("data/osint.db")[1] if REMOTE_REPO else None
+    if REMOTE_REPO and status != 200:
+        hint = {
+            0: "Network error reaching GitHub.",
+            401: "GITHUB_TOKEN is invalid or expired.",
+            403: "GITHUB_TOKEN lacks access, or the GitHub API rate limit was hit (add a token if you haven't).",
+            404: "Either the `data` branch has no data/osint.db yet, or (private repo) GITHUB_TOKEN can't see this "
+                 "repo — it needs access to this repository with Contents: Read-only.",
+        }.get(status, "Unexpected response from GitHub.")
+        st.error(f"Could not read data from GitHub `{REMOTE_REPO}` (HTTP {status}). {hint}")
+    elif collected:
+        st.warning(f"{collected} items were collected but none are analyzed yet. Check the latest GitHub Actions run log.")
+    elif REMOTE_REPO:
+        st.info("The database on GitHub is empty. Wait for the next workflow run, then press Refresh.")
+    else:
+        st.info("No data yet. Locally: run `python main.py run`, then refresh. On Streamlit Cloud: add the "
+                "GITHUB_DATA_REPO and GITHUB_TOKEN secrets (app Settings → Secrets), then reboot the app.")
+    if st.button("↻ Refresh", key="refresh_empty"):
+        st.cache_data.clear()
+        st.rerun()
     st.stop()
 st.caption(f"Last collection: {to_local(items['collected_at'].max(), cfg)}"
            + (f" · data from GitHub `{REMOTE_REPO}`" if REMOTE_REPO else ""))
@@ -237,7 +261,7 @@ else:
     )
     pick = st.selectbox("Preview ticket email", tickets["id"])
     if REMOTE_REPO:
-        raw = fetch_remote(f"data/tickets/{pick}.html")
+        raw, _ = fetch_remote(f"data/tickets/{pick}.html")
         report = raw.decode("utf-8") if raw else None
     else:
         local = TICKETS_DIR / f"{pick}.html"
