@@ -231,17 +231,31 @@ with c4:
 
 # ─── Negative items table ─────────────────────────────────────────────────────
 st.subheader("Negative items")
-cat_filter = st.multiselect("Filter by type", sorted(neg["category_label"].dropna().unique()))
+t1, t2 = st.columns([3, 1], vertical_alignment="bottom")
+cat_filter = t1.multiselect("Filter by type", sorted(neg["category_label"].dropna().unique()))
+only_doubtful = t2.checkbox("Only doubtful (credibility < 40)")
 view = neg[neg["category_label"].isin(cat_filter)] if cat_filter else neg
-view = view.assign(headline=view["title"].where(view["title"].fillna("") != "", view["text"].str[:160]))
+if only_doubtful:
+    view = view[view["credibility"] < 40]
+view = view.assign(
+    headline=view["title"].where(view["title"].fillna("") != "", view["text"].str[:160]),
+    factcheck=(view["factcheck_rating"].fillna("") + " — " + view["factcheck_publisher"].fillna("")).str.strip(" —"),
+)
 st.dataframe(
     view.sort_values(["severity", "ts"], ascending=[False, False])[
-        ["ts", "severity", "category_label", "headline", "summary", "source", "source_type", "url", "analyzer"]],
+        ["ts", "severity", "category_label", "headline", "summary", "credibility", "cred_reason",
+         "factcheck", "factcheck_url", "source", "source_type", "url", "analyzer"]],
     hide_index=True, width="stretch",
     column_config={
         "ts": st.column_config.DatetimeColumn("Time", format="D MMM, h:mm a"),
         "severity": st.column_config.ProgressColumn("Severity", min_value=0, max_value=5, format="%d"),
         "category_label": "Type", "headline": "Headline / text", "summary": "Summary",
+        "credibility": st.column_config.ProgressColumn(
+            "Credibility", min_value=0, max_value=100, format="%d",
+            help="Not a truth score. Combines published fact-checks, how many independent sources carry the "
+                 "story, and what kind of source it is."),
+        "cred_reason": "Why", "factcheck": "Fact check",
+        "factcheck_url": st.column_config.LinkColumn("Fact-check link", display_text="open"),
         "source": "Source", "source_type": "Kind",
         "url": st.column_config.LinkColumn("Link", display_text="open"),
         "analyzer": "Analyzer",

@@ -24,7 +24,15 @@ CREATE TABLE IF NOT EXISTS items (
     category     TEXT,            -- negative-news category, 'none' for non-negative
     severity     INTEGER,         -- 1..5 for negative, 0 otherwise
     summary      TEXT,
-    analyzer     TEXT
+    analyzer     TEXT,
+    -- Credibility check (negative items only); NULL = not checked yet
+    corroboration      INTEGER,   -- how many distinct sources carry the same story
+    credibility        INTEGER,   -- 0..100
+    cred_reason        TEXT,      -- why that score, in plain words
+    factcheck_rating   TEXT,      -- verdict from a published fact-check, e.g. "False"
+    factcheck_publisher TEXT,
+    factcheck_url      TEXT,
+    checked_at         TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_items_ts ON items(ts);
 CREATE INDEX IF NOT EXISTS idx_items_sentiment ON items(sentiment);
@@ -59,11 +67,24 @@ def hours_ago(hours: float) -> str:
     return (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat(timespec="seconds")
 
 
+# Columns added after the first release; databases created earlier are upgraded in place
+LATER_COLUMNS = {
+    "corroboration": "INTEGER", "credibility": "INTEGER", "cred_reason": "TEXT",
+    "factcheck_rating": "TEXT", "factcheck_publisher": "TEXT", "factcheck_url": "TEXT",
+    "checked_at": "TEXT",
+}
+
+
 def connect() -> sqlite3.Connection:
     DATA_DIR.mkdir(exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     conn.executescript(SCHEMA)
+    have = {r["name"] for r in conn.execute("PRAGMA table_info(items)")}
+    for column, kind in LATER_COLUMNS.items():
+        if column not in have:
+            conn.execute(f"ALTER TABLE items ADD COLUMN {column} {kind}")
+    conn.commit()
     return conn
 
 
@@ -127,6 +148,40 @@ def reset_analysis(conn: sqlite3.Connection, analyzer: str = "lexicon") -> int:
     ).rowcount
     conn.commit()
     return n
+
+
+def unchecked_negatives(conn: sqlite3.Connection, limit: int) -> list[dict]:
+    rows = conn.execute(
+        "SELECT * FROM items WHERE sentiment = 'negative' AND checked_at IS NULL ORDER BY ts DESC LIMIT ?",
+        (limit,),
+    )
+    return [dict(r) for r in rows]
+
+
+def items_since(conn: sqlite3.Connection, since: str) -> list[dict]:
+    """Everything collected in a window — used to see how many sources carry the same story."""
+    rows = conn.execute(
+        "SELECT id, source, source_type, title, text, ts FROM items WHERE ts >= ?", (since,)
+    )
+    return [dict(r) for r in rows]
+
+
+def reset_credibility(conn: sqlite3.Connection) -> int:
+    """Clear the credibility check so the next pass redoes it (e.g. after enabling the Fact Check API)."""
+    n = conn.execute("UPDATE items SET checked_at = NULL WHERE sentiment = 'negative'").rowcount
+    conn.commit()
+    return n
+
+
+def save_credibility(conn: sqlite3.Connection, rows: list[dict]) -> None:
+    conn.executemany(
+        """UPDATE items SET corroboration=:corroboration, credibility=:credibility, cred_reason=:cred_reason,
+                            factcheck_rating=:factcheck_rating, factcheck_publisher=:factcheck_publisher,
+                            factcheck_url=:factcheck_url, checked_at=:checked_at
+           WHERE id=:id""",
+        rows,
+    )
+    conn.commit()
 
 
 def window_stats(conn: sqlite3.Connection, since: str) -> dict:

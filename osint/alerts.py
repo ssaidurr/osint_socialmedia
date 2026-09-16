@@ -131,6 +131,9 @@ def render_email(cfg: dict, ticket: dict, stats: dict, items: list[dict]) -> tup
     created = to_local(ticket["created_at"], cfg)
     cats = sorted(stats["categories"].items(), key=lambda kv: -kv[1])
 
+    def safe_url(url: str | None) -> str:  # feed-supplied links: never pass on javascript:/data: URLs
+        return url if url and url.startswith(("https://", "http://")) else "#"
+
     # Plain-text part
     lines = [
         f"Ticket: {ticket['id']}   Level: {level}   Created: {created}",
@@ -145,14 +148,16 @@ def render_email(cfg: dict, ticket: dict, stats: dict, items: list[dict]) -> tup
                      f"{it['title'] or it['text'][:120]} — {it['source']}")
         if it.get("summary"):
             lines.append(f"   {it['summary']}")
-        lines.append(f"   {it['url']}")
+        if it.get("factcheck_rating"):
+            lines.append(f"   FACT-CHECK: {it['factcheck_rating']} — {it['factcheck_publisher']} "
+                         f"{safe_url(it['factcheck_url'])}")
+        elif it.get("credibility") is not None and it["credibility"] < 40:
+            lines.append(f"   Low credibility ({it['credibility']}/100): {it.get('cred_reason')}")
+        lines.append(f"   {safe_url(it['url'])}")
     text_body = "\n".join(lines)
 
     # HTML part (inline styles — email clients ignore <style> blocks)
     e = html.escape
-
-    def safe_url(url: str | None) -> str:  # feed-supplied links: never allow javascript:/data: hrefs
-        return url if url and url.startswith(("https://", "http://")) else "#"
 
     level_color = {"CRITICAL": "#b42318", "HIGH": "#c4320a", "MEDIUM": "#b54708"}[level]
     cat_rows = "".join(
@@ -167,6 +172,13 @@ def render_email(cfg: dict, ticket: dict, stats: dict, items: list[dict]) -> tup
         f"<a href='{e(safe_url(it['url']))}' style='color:#1d4ed8;font-weight:600;text-decoration:none'>"
         f"{e(it['title'] or it['text'][:160])}</a><br>"
         + (f"<span style='color:#333'>{e(it['summary'])}</span><br>" if it.get("summary") else "")
+        + (f"<span style='color:#b42318;font-size:12px'>⚠ Fact-check: <b>{e(it['factcheck_rating'])}</b> — "
+           f"{e(it['factcheck_publisher'] or '')} "
+           f"<a href='{e(safe_url(it['factcheck_url']))}' style='color:#b42318'>view</a></span><br>"
+           if it.get("factcheck_rating") else
+           f"<span style='color:#b54708;font-size:12px'>⚠ Low credibility ({it['credibility']}/100): "
+           f"{e(it.get('cred_reason') or '')}</span><br>"
+           if it.get("credibility") is not None and it["credibility"] < 40 else "")
         + f"<span style='color:#667085;font-size:12px'>{e(it['source'])} · {e(category_label(it['category']))}"
         f" · severity {it['severity']}/5 · {e(to_local(it['ts'], cfg))}</span></td></tr>"
         for it in items)

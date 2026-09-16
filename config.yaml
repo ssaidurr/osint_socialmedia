@@ -45,6 +45,55 @@ analyzer:
   batch_size: 25
   max_items_per_run: 500
 
+# ─── Credibility check (negative items) ───────────────────────────────────────
+# NOT a "% true" score — nothing can compute that. It combines three measurable signals:
+#   1. published fact-checks (Rumor Scanner, BOOM, AFP, ...) matching the claim
+#   2. how many independent sources carry the same story
+#   3. what kind of source it is (established outlet vs. an unknown site vs. a comment)
+credibility:
+  enabled: true
+  fact_check: true              # Google Fact Check Tools API; reuses YOUTUBE_API_KEY (or GOOGLE_API_KEY).
+                                # Enable "Fact Check Tools API" in the same Google Cloud project first.
+  fact_check_max_age_days: 0    # 0 = no age limit. Old debunks still matter — rumours come back around,
+                                # and limiting to a year was measurably losing real matches.
+  fact_check_skip_well_sourced: true   # skip the lookup (~2s each) for stories several trusted outlets carry
+  fact_check_max_lookups: 30           # lookups per run. Each takes ~2s, and on GitHub Actions that time
+                                       # is billed — 30 keeps a run at roughly a minute of lookups.
+                                       # Doubtful items (comments, unknown sites) are checked first.
+  fact_check_min_similarity: 0.30      # character-level similarity needed to accept a published fact-check
+                                       # as being about this item. Calibrated on real pairs: same story
+                                       # scored >= 0.39, unrelated stories <= 0.21. Raise it to be stricter.
+  corroboration_window_hours: 48
+  max_items_per_run: 120
+  # Sources treated as established (substring match, case-insensitive)
+  trusted_sources:
+    - Prothom Alo
+    - প্রথম আলো
+    - The Daily Star
+    - bdnews24
+    - The Business Standard
+    - Bangladesh Sangbad Sangstha
+    - BSS
+    - Dhaka Tribune
+    - New Age
+    - Jugantor
+    - Samakal
+    - Ittefaq
+    - Kaler Kantho
+    - Banglanews24
+    - Jagonews24
+    - Daily Sun
+    - Financial Express
+    - Reuters
+    - Associated Press
+    - AFP
+    - BBC
+    - Al Jazeera
+    - Anadolu
+    - Deutsche Welle
+    - ReliefWeb
+    - UNB
+
 # ─── Ticket / email alert ─────────────────────────────────────────────────────
 # A ticket is created (and emailed) when, within the last `window_hours`:
 #   total analyzed items >= min_items

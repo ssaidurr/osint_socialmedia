@@ -36,6 +36,32 @@ Protiti negative item-e **severity 1–5** thake. Category list-ta [osint/analyz
 
 LLM fail korle (key vul, rate limit, quota shesh, network) oi item-gulo lexicon diye analyze hoy, tai pipeline kokhono atke jay na.
 
+## Fact check ar credibility
+
+Protiti negative item-er ekta **Credibility score (5–95)** ar tar karon dashboard-e dekha jay.
+
+**Eita "koto percent true" na.** Ajker taja khobor shotti kina, sheta kono AI ba tool nishchit bhabe bolte pare na. Tai ekhane shudhu emon jinish mapa hoy ja asholei mapa jay:
+
+1. **Published fact-check:** Google Fact Check Tools API diye dekha hoy Rumor Scanner, BOOM, AFP-er moto fact-checker-ra ei claim-ta age jachai koreche kina. Match pele verdict ar link dekhano hoy.
+
+   Bhul label boshano shobcheye kharap fol, tai match-er niyom-ta kora: item-er lekha ar fact-check-er (claim + article title) majhe **okkhor-vittik mil ≥ 0.30** na hole match dhora hoy na. Shobdo-vittik mil Bangla-y kaaj kore na ("ইউনূস" vs "ইউনূসের" alada token), ar fact-checker-ra prayi claim English-e ar title Bangla-y lekhe. Threshold-ta asol fact-check jora diye calibrate kora: ekই khobor-er jora peyeche ≥ 0.39, alada khobor-er jora ≤ 0.21. Aro kora korte chaile `config.yaml`-e `fact_check_min_similarity` barao.
+
+   Fact-check-e purono debunk-o kaaj-e lage (gujob fire ashe), tai kono age limit nei. Setting bodlanor por purono item abar jachai korte: `main.py credibility --recheck`.
+2. **Corroboration:** Ekই khobor koyta **alada source** diyeche. Headline-er shobdo miliye ber kora hoy, tai alada bhashay lekha holeo dhora pore.
+3. **Source-er man:** Established outlet (config-er `trusted_sources`), naki ojana site, naki YouTube/Reddit comment.
+
+Score kokhonoi 0 ba 100 hoy na. Beshi score mane "emon source-e ache jara shadharonoto thik khobor dey, ar onnorao eta dicche". Kom score mane "shondeho koro", **"eita fake" na**. Ar fact-check na pawa mane khobor-ta shotti na — shudhu mane keu eta niye ekhono fact-check kore ni.
+
+Dashboard-er Negative items table-e **"Only doubtful (credibility < 40)"** tick korle shudhu shondehojonok item-gulo dekhabe. Ticket email-eo low-credibility ar fact-check verdict dekhano hoy.
+
+### Fact Check API enable korte hobe (free)
+
+1. https://console.cloud.google.com/apis/library/factchecktools.googleapis.com e jao (ekই project jekhane YouTube API enable korecho).
+2. **Enable** chapo.
+3. Key-ta jodi YouTube API-te restrict kora thake, tahole **Credentials → key → Edit → API restrictions**-e "Fact Check Tools API"-o select koro.
+
+Enable na korle baki duita signal (corroboration ar source-er man) thik-i kaaj korbe, shudhu published fact-check match hobe na.
+
 ## Setup
 
 ```bash

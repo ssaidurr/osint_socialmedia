@@ -16,6 +16,7 @@ from osint import db
 from osint.alerts import category_label, check_and_alert, send_test_email
 from osint.analyzer import analyze_pending
 from osint.collectors import collect_all
+from osint.credibility import check_pending
 from osint.config import load_config, to_local
 
 
@@ -39,6 +40,17 @@ def analyze(conn, cfg, redo: bool = False) -> None:
             break
 
 
+def credibility(conn, cfg, recheck: bool = False) -> None:
+    if recheck:
+        print(f"Re-checking {db.reset_credibility(conn)} negative items")
+    c = check_pending(conn, cfg)
+    if c["skipped"]:
+        print(f"Credibility check off ({c['skipped']})")
+        return
+    print(f"Checked {c['checked']} negative items ({c['lookups']} fact-check lookups) — "
+          f"published fact-check matched: {c['factchecks']}, low credibility: {c['low']}")
+
+
 def check(conn, cfg, dry_run: bool) -> None:
     d = check_and_alert(conn, cfg, dry_run=dry_run)
     s = d["stats"]
@@ -58,6 +70,7 @@ def check(conn, cfg, dry_run: bool) -> None:
 def run(conn, cfg, dry_run: bool) -> None:
     print("── collect"); collect(conn, cfg)
     print("── analyze"); analyze(conn, cfg)
+    print("── credibility"); credibility(conn, cfg)
     print("── check");   check(conn, cfg, dry_run)
     if days := cfg.get("retention_days"):
         if n := db.prune(conn, days):
@@ -69,6 +82,11 @@ def report(conn, cfg, hours: float) -> None:
     print(f"Last {hours:g}h: {s['total']} analyzed items — negative {s['negative']} ({s['ratio']:.0%}), "
           f"neutral {s['neutral']}, positive {s['positive']}, avg negative severity {s['avg_severity']:.1f}/5")
     if s["negative"]:
+        doubtful, checked, factchecked = conn.execute(
+            """SELECT COALESCE(SUM(credibility < 40), 0), COUNT(credibility), COUNT(factcheck_rating)
+               FROM items WHERE sentiment = 'negative' AND ts >= ?""", (s["since"],)).fetchone()
+        print(f"Credibility: {doubtful} doubtful (< 40) of {checked} checked · "
+              f"published fact-check matched: {factchecked}")
         print("\nNegative news by type:")
         top = max(s["categories"].values())
         for k, n in s["categories"].items():
@@ -92,6 +110,9 @@ def main() -> None:
     ap = sub.add_parser("analyze")
     ap.add_argument("--redo", action="store_true",
                     help="re-analyze items the lexicon handled (after adding ANTHROPIC_API_KEY or editing keywords)")
+    cp = sub.add_parser("credibility", help="score negative items: fact-check matches, corroboration, source quality")
+    cp.add_argument("--recheck", action="store_true",
+                    help="redo already-checked items (e.g. after enabling the Fact Check Tools API)")
     for name in ("check", "run", "watch"):
         sp = sub.add_parser(name)
         sp.add_argument("--dry-run", action="store_true", help="create the ticket report but do not email it")
@@ -111,6 +132,8 @@ def main() -> None:
         collect(conn, cfg)
     elif args.cmd == "analyze":
         analyze(conn, cfg, args.redo)
+    elif args.cmd == "credibility":
+        credibility(conn, cfg, args.recheck)
     elif args.cmd == "check":
         check(conn, cfg, args.dry_run)
     elif args.cmd == "run":
