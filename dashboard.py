@@ -66,6 +66,11 @@ def load() -> tuple[pd.DataFrame, pd.DataFrame, int]:
     tickets = pd.read_sql_query("SELECT * FROM tickets ORDER BY created_at DESC", conn)
     conn.close()
     # Charts get naive local time so the axis reads in Dhaka time regardless of the browser
+    # A database written by an older version of the monitor has no credibility columns yet
+    for column in ("corroboration", "credibility", "cred_reason", "factcheck_rating",
+                   "factcheck_publisher", "factcheck_url"):
+        if column not in items.columns:
+            items[column] = None
     items["ts"] = pd.to_datetime(items["ts"], utc=True, format="ISO8601").dt.tz_convert(TZ).dt.tz_localize(None)
     items["category_label"] = items["category"].map(CATEGORIES)
     tickets["created"] = pd.to_datetime(tickets["created_at"], utc=True, format="ISO8601").dt.tz_convert(TZ).dt.tz_localize(None)
