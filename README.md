@@ -16,11 +16,29 @@ Collect ──► Analyze ──────────────────
 | Source | Ki pay | Setup |
 |---|---|---|
 | Google News | Keyword diye search kora news (English + বাংলা) | Kichu lagbe na |
-| News RSS | Prothom Alo, The Daily Star (config-e aro add kora jay) | Kichu lagbe na |
-| Reddit | r/bangladesh, r/dhaka-er notun post **ar comment** | Kichu lagbe na (comment feed-e Reddit majhe majhe 429 rate-limit dey. Tokhon post-gulo thik-i save hoy, comment porer run-e ashe) |
+| News RSS | Prothom Alo, The Daily Star, Risingbd, TBS News | Kichu lagbe na |
+| Reddit (subreddit) | r/bangladesh, r/dhaka-er notun post **ar comment** | Kichu lagbe na |
+| Reddit (search) | Puro Reddit-e keyword diye khoja notun post | Kichu lagbe na |
+| Telegram | Public channel-er post (thedailystar, prothomalo, tbsnews) | Kichu lagbe na — channel-er public preview page pora hoy |
+| Mastodon | Public hashtag timeline (#bangladesh, #dhaka) | Kichu lagbe na |
 | YouTube | Video + comment | `YOUTUBE_API_KEY` (free, niche dekhun) |
 
-Facebook/Instagram rakha hoyni. Meta-r public API nei, ar scraping korle ToS bhange.
+Reddit unauthenticated request-e kothin rate limit (429) dey. Ekta feed fail korle baki source-gulo thik-i chole, ar oi feed porer run-e chesta kore.
+
+**Onno BD outlet-er RSS:** Kaler Kantho, Samakal, Ittefaq, Jugantor, Dhaka Post, UNB, New Age, Somoy, Jagonews24, Banglanews24 — egulo hoy bot block kore, noy kaaj kora RSS feed nei. Tobe Google News egulor khobor ene dey.
+
+### Ja add kora jay ni (ar keno)
+
+| Platform | Keno na |
+|---|---|
+| **Facebook / Instagram** | Meta public post porar API bondho kore diyeche (CrowdTangle-o 2024-e bondho). Shudhu **nijer** Page/Business account-er data pora jay. |
+| **WhatsApp** | Group ar community end-to-end encrypted. Channel porar public API nei. Shudhu nijer Business number-e asha message pora jay. |
+| **Signal** | Kono public content-i nei, shob encrypted. Monitor korar moto kichu nei. |
+| **TikTok** | Research API shudhu approved university/NGO-der jonno (mulot US/EU). Baki shob nijer account-er modhhe shimito. |
+| **LinkedIn** | Shudhu nijer Company Page, ar tar jonno-o partner approval lage. Public search API nei. |
+| **X (Twitter)** | API ache kintu paid ar dami. |
+
+Egulor kono-tateo scraping kora hoyni — ToS bhange, account ban hote pare, ar aini jhuki ache.
 
 ## Negative news-er type (category)
 

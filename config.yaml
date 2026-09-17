@@ -18,11 +18,30 @@ google_news:
 rss_feeds:
   - { name: "Prothom Alo", url: "https://www.prothomalo.com/feed/" }
   - { name: "The Daily Star", url: "https://www.thedailystar.net/frontpage/rss.xml" }
+  - { name: "Risingbd", url: "https://www.risingbd.com/rss/rss.xml" }
+  - { name: "TBS News", url: "https://www.tbsnews.net/rss.xml" }
+  # Most other BD outlets (Kaler Kantho, Samakal, Ittefaq, Jugantor, Dhaka Post, UNB, New Age,
+  # Somoy, Jagonews24, Banglanews24) either block bots or no longer publish a working feed.
+  # Google News below still picks their stories up.
 
 # Public Reddit posts + latest comments (no login needed)
 reddit:
   subreddits: [bangladesh, dhaka]
   include_comments: true
+  searches: ["bangladesh", "dhaka"]   # keyword search across all of Reddit, not just the subreddits above
+  search_limit: 25
+
+# Public Telegram channels. No API key: the channel's public preview page is read.
+# Private channels and groups are not readable. Add usernames without the @.
+telegram:
+  channels: [thedailystar, prothomalo, tbsnews]
+  limit: 40
+
+# Public Mastodon hashtag timelines (open, no key)
+mastodon:
+  instances: [mastodon.social]
+  tags: [bangladesh, dhaka]
+  limit: 40
 
 # YouTube videos + comments. Needs YOUTUBE_API_KEY in .env (free, Google Cloud Console).
 # Skipped automatically when no key is set.
@@ -93,6 +112,11 @@ credibility:
     - Deutsche Welle
     - ReliefWeb
     - UNB
+    - Risingbd
+    - TBS News
+    - t.me/thedailystar        # a newspaper's own Telegram channel counts as that newspaper
+    - t.me/prothomalo
+    - t.me/tbsnews
 
 # ─── Ticket / email alert ─────────────────────────────────────────────────────
 # A ticket is created (and emailed) when, within the last `window_hours`:

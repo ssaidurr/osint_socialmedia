@@ -44,7 +44,9 @@ WORD_RE = re.compile(r"[\wঀ-৿]+", re.UNICODE)
 BANGLA_RE = re.compile(r"[ঀ-৿]")
 
 # Base score by what kind of source the item came from
-UGC_TYPES = {"reddit_comment", "reddit_post", "youtube_comment"}
+UGC_TYPES = {"reddit_comment", "reddit_post", "youtube_comment", "mastodon_post"}
+# Comments carry the channel's name as their source, so they must never inherit its reputation
+COMMENT_TYPES = {"reddit_comment", "youtube_comment"}
 BASE_TRUSTED, BASE_UNKNOWN_NEWS, BASE_VIDEO, BASE_UGC = 65, 45, 30, 20
 
 
@@ -181,14 +183,19 @@ class FactChecker:
 
 
 def source_base(item: dict, trusted: list[str]) -> tuple[int, str]:
-    source = (item.get("source") or "").lower()
-    if item["source_type"] in UGC_TYPES:
-        kind = "Reddit" if item["source_type"].startswith("reddit") else "YouTube"
-        return BASE_UGC, f"{kind} {item['source_type'].split('_')[1]}"
-    if item["source_type"] == "youtube_video":
-        return BASE_VIDEO, "YouTube video"
-    if any(t.lower() in source for t in trusted):
+    source, kind = (item.get("source") or "").lower(), item["source_type"]
+    if kind in COMMENT_TYPES:
+        platform = "Reddit" if kind.startswith("reddit") else "YouTube"
+        return BASE_UGC, f"{platform} comment"
+    if any(t.lower() in source for t in trusted):   # e.g. a newspaper's own Telegram channel
         return BASE_TRUSTED, f"{item['source']} (established)"
+    if kind in UGC_TYPES:
+        platform = {"reddit_post": "Reddit post", "mastodon_post": "Mastodon post"}[kind]
+        return BASE_UGC, platform
+    if kind == "youtube_video":
+        return BASE_VIDEO, "YouTube video"
+    if kind == "telegram_post":
+        return BASE_UNKNOWN_NEWS, f"{item['source']} (Telegram channel)"
     return BASE_UNKNOWN_NEWS, f"{item['source']} (not a known outlet)"
 
 

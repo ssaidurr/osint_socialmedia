@@ -115,7 +115,7 @@ def reddit(subreddit: str, source_type: str) -> list[dict]:
                 "ts": _entry_ts(e),
                 "collected_at": collected,
             })
-    time.sleep(3)  # Reddit rate-limits unauthenticated feeds hard; space the requests out
+    time.sleep(6)  # Reddit rate-limits unauthenticated feeds hard; space the requests out
     return out
 
 
@@ -190,6 +190,18 @@ def collect_all(cfg: dict, conn=None) -> tuple[list[dict], dict[str, int | str]]
         for kind in reddit_kinds:
             label = "posts" if kind == "reddit_post" else "comments"
             jobs.append((f"Reddit: r/{sub} {label}", lambda sub=sub, kind=kind: reddit(sub, kind)))
+    for q in rd.get("searches", []):
+        jobs.append((f"Reddit search: {q}", lambda q=q: reddit_search(q, rd.get("search_limit", 25))))
+
+    tg = cfg.get("telegram") or {}
+    for channel in tg.get("channels", []):
+        jobs.append((f"Telegram: {channel}", lambda channel=channel: telegram(channel, tg.get("limit", 40))))
+
+    md = cfg.get("mastodon") or {}
+    for instance in md.get("instances", []):
+        for tag in md.get("tags", []):
+            jobs.append((f"Mastodon: #{tag} @{instance}",
+                         lambda instance=instance, tag=tag: mastodon(instance, tag, md.get("limit", 40))))
     yt, yt_key = cfg.get("youtube") or {}, os.getenv("YOUTUBE_API_KEY")
     summary: dict[str, int | str] = {}
     if yt.get("queries") and yt_key:
@@ -216,3 +228,84 @@ def collect_all(cfg: dict, conn=None) -> tuple[list[dict], dict[str, int | str]]
             log.warning("%s failed: %s", name, e)
             summary[name] = f"error: {e}"
     return items, summary
+
+
+# ─── Telegram public channels (no API key: the channel preview page) ──────────
+TELEGRAM_MESSAGE_RE = re.compile(r'data-post="(?P<post>[^"]+)"(?P<body>.*?)(?=data-post="|\Z)', re.S)
+TELEGRAM_TEXT_RE = re.compile(r'<div class="tgme_widget_message_text[^"]*"[^>]*>(.*?)</div>', re.S)
+TELEGRAM_TIME_RE = re.compile(r'<time datetime="([^"]+)"')
+
+
+def telegram(channel: str, limit: int = 40) -> list[dict]:
+    """Public channel posts. Private channels and groups are not readable — and not our business."""
+    r = requests.get(f"https://t.me/s/{channel}", headers=HEADERS, timeout=20)
+    r.raise_for_status()
+    collected, out = now_utc(), []
+    for message in TELEGRAM_MESSAGE_RE.finditer(r.text):
+        body = message.group("body")
+        found_text = TELEGRAM_TEXT_RE.search(body)
+        found_time = TELEGRAM_TIME_RE.search(body)
+        text = clean(found_text.group(1)) if found_text else ""
+        if not text:
+            continue  # photo/video-only posts carry nothing to analyse
+        post = message.group("post")
+        out.append({
+            "id": make_id("telegram_post", post),
+            "source": f"t.me/{channel}",
+            "source_type": "telegram_post",
+            "title": text[:200],
+            "text": text[:2000],
+            "url": f"https://t.me/{post}",
+            "author": f"t.me/{channel}",
+            "ts": _iso(found_time.group(1)) if found_time else collected,
+            "collected_at": collected,
+        })
+    return out[-limit:]
+
+
+# ─── Mastodon public hashtag timelines (no key) ───────────────────────────────
+def mastodon(instance: str, tag: str, limit: int = 40) -> list[dict]:
+    r = requests.get(f"https://{instance}/api/v1/timelines/tag/{tag}", headers=HEADERS,
+                     params={"limit": min(limit, 40)}, timeout=20)
+    r.raise_for_status()
+    collected, out = now_utc(), []
+    for post in r.json():
+        text = clean(post.get("content"))
+        if not text:
+            continue
+        out.append({
+            "id": make_id("mastodon_post", post.get("uri") or str(post.get("id"))),
+            "source": f"mastodon/{instance}",
+            "source_type": "mastodon_post",
+            "title": text[:200],
+            "text": text[:2000],
+            "url": post.get("url"),
+            "author": (post.get("account") or {}).get("acct"),
+            "ts": _iso(post["created_at"]),
+            "collected_at": collected,
+        })
+    return out
+
+
+# ─── Reddit keyword search (all of Reddit, not just the configured subreddits) ─
+def reddit_search(query: str, limit: int = 25) -> list[dict]:
+    # type=link keeps subreddits and profiles out of the results — posts only
+    url = (f"https://www.reddit.com/search.rss?q={urllib.parse.quote(query)}"
+           f"&sort=new&type=link&limit={limit}")
+    collected, out = now_utc(), []
+    for e in _fetch_feed(url).entries:
+        body = (e.get("content") or [{}])[0].get("value") or e.get("summary")
+        subreddit = next((t.get("term") for t in e.get("tags", []) if t.get("term", "").startswith("r/")), None)
+        out.append({
+            "id": make_id("reddit_post", e.get("link") or e.get("id", "")),
+            "source": subreddit or "Reddit search",
+            "source_type": "reddit_post",
+            "title": clean(e.get("title")),
+            "text": re.sub(r"submitted by\s+/u/.*$", "", clean(body)).strip()[:2000],
+            "url": e.get("link"),
+            "author": clean(e.get("author")) or None,
+            "ts": _entry_ts(e),
+            "collected_at": collected,
+        })
+    time.sleep(6)  # Reddit rate-limits unauthenticated requests hard
+    return out
