@@ -1,7 +1,9 @@
 """Negative-news analytics dashboard.   Run:  streamlit run dashboard.py"""
 from __future__ import annotations
 
+import difflib
 import os
+import re
 
 import altair as alt
 import pandas as pd
@@ -119,19 +121,35 @@ if not country_options:
 if f4.button("↻ Refresh", width="stretch"):
     st.cache_data.clear()
     st.rerun()
-search = st.text_input("Search", placeholder="keyword in the headline, text or summary — e.g. election, ডেঙ্গু")
+search = st.text_input("Search", placeholder="keywords in the headline, text or summary — e.g. election, ডেঙ্গু")
 
 hours = RANGES[range_name]
 now = pd.Timestamp.now(tz=TZ).tz_localize(None)
 df = items[(items["ts"] >= now - pd.Timedelta(hours=hours)) & items["source_type"].isin(types)]
 if countries:
     df = df[df["country"].isin(countries)]
+haystack = None
 if search.strip():
+    # Every word must appear somewhere in the item, in any order
     haystack = (df["title"].fillna("") + " " + df["text"].fillna("") + " " + df["summary"].fillna("")).str.lower()
-    df = df[haystack.str.contains(search.strip().lower(), regex=False)]
+    mask = pd.Series(True, index=df.index)
+    for word in search.lower().split():
+        mask &= haystack.str.contains(word, regex=False)
+    df, haystack = df[mask], haystack
 neg = df[df["sentiment"] == "negative"]
 if df.empty:
-    st.warning("Nothing matches these filters. Try a longer time range, or clear the country/search filter.")
+    message = "Nothing matches these filters. Try a longer time range, or clear the country/search filter."
+    if haystack is not None and len(haystack):
+        # A typo shouldn't look like "no data" — offer the closest words that do appear
+        vocabulary = set()
+        for blob in haystack.head(800):
+            vocabulary.update(w for w in re.findall(r"[\w\u0980-\u09FF]{4,}", blob))
+        hints = []
+        for word in search.lower().split():
+            hints += difflib.get_close_matches(word, vocabulary, n=3, cutoff=0.75)
+        if hints:
+            message += "  Did you mean: " + ", ".join(list(dict.fromkeys(hints))[:5]) + "?"
+    st.warning(message)
     st.stop()
 
 # ─── Alert status (same rule as the ticket check) ─────────────────────────────
