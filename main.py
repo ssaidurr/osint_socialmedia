@@ -14,7 +14,7 @@ import time
 
 from osint import db
 from osint.alerts import category_label, check_and_alert, send_test_email
-from osint.analyzer import analyze_pending
+from osint.analyzer import analyze_pending, backfill_country
 from osint.collectors import collect_all
 from osint.credibility import check_pending
 from osint.config import load_config, to_local
@@ -27,9 +27,15 @@ def collect(conn, cfg) -> None:
     print(f"Collected {len(items)} items, {db.insert_items(conn, items)} new")
 
 
-def analyze(conn, cfg, redo: bool = False) -> None:
-    if redo:
+def analyze(conn, cfg, redo: bool = False, redo_all: bool = False, countries: bool = False) -> None:
+    if countries:
+        print(f"Filled country on {backfill_country(conn)} already-analyzed items")
+        return
+    if redo_all:
+        print(f"Re-analyzing {db.reset_analysis(conn, None)} analyzed items")
+    elif redo:
         print(f"Re-analyzing {db.reset_analysis(conn, 'lexicon')} lexicon-analyzed items")
+    redo = redo or redo_all
     while True:  # one pass handles analyzer.max_items_per_run items; keep going until none are pending
         c = analyze_pending(conn, cfg)
         if not c["analyzed"]:
@@ -91,6 +97,12 @@ def report(conn, cfg, hours: float) -> None:
         top = max(s["categories"].values())
         for k, n in s["categories"].items():
             print(f"  {category_label(k):<48} {'█' * max(1, round(24 * n / top)):<24} {n:>4} ({n / s['negative']:.0%})")
+        top_countries = conn.execute(
+            """SELECT country, COUNT(*) n FROM items WHERE sentiment = 'negative' AND country IS NOT NULL
+               AND ts >= ? GROUP BY country ORDER BY n DESC LIMIT 8""", (s["since"],)).fetchall()
+        if top_countries:
+            print("\nNegative items by country:")
+            print("  " + " · ".join(f"{r['country']} {r['n']}" for r in top_countries))
         print("\nMost severe:")
         for it in db.top_negative(conn, s["since"], 8):
             print(f"  [{it['severity']}] {(it['title'] or it['text'])[:90]} — {it['source']}")
@@ -110,6 +122,9 @@ def main() -> None:
     ap = sub.add_parser("analyze")
     ap.add_argument("--redo", action="store_true",
                     help="re-analyze items the lexicon handled (after adding ANTHROPIC_API_KEY or editing keywords)")
+    ap.add_argument("--redo-all", action="store_true", help="re-analyze every item, LLM-analyzed ones included")
+    ap.add_argument("--countries", action="store_true",
+                    help="fill the country of already-analyzed items offline (free, no LLM calls)")
     cp = sub.add_parser("credibility", help="score negative items: fact-check matches, corroboration, source quality")
     cp.add_argument("--recheck", action="store_true",
                     help="redo already-checked items (e.g. after enabling the Fact Check Tools API)")
@@ -131,7 +146,7 @@ def main() -> None:
     if args.cmd == "collect":
         collect(conn, cfg)
     elif args.cmd == "analyze":
-        analyze(conn, cfg, args.redo)
+        analyze(conn, cfg, args.redo, args.redo_all, args.countries)
     elif args.cmd == "credibility":
         credibility(conn, cfg, args.recheck)
     elif args.cmd == "check":

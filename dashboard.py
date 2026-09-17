@@ -67,7 +67,7 @@ def load() -> tuple[pd.DataFrame, pd.DataFrame, int]:
     conn.close()
     # Charts get naive local time so the axis reads in Dhaka time regardless of the browser
     # A database written by an older version of the monitor has no credibility columns yet
-    for column in ("corroboration", "credibility", "cred_reason", "factcheck_rating",
+    for column in ("country", "corroboration", "credibility", "cred_reason", "factcheck_rating",
                    "factcheck_publisher", "factcheck_url"):
         if column not in items.columns:
             items[column] = None
@@ -107,20 +107,28 @@ st.caption(f"Last collection: {to_local(items['collected_at'].max(), cfg)}"
            + (f" · data from GitHub `{REMOTE_REPO}`" if REMOTE_REPO else ""))
 
 # ─── Filters (one row, above the charts) ──────────────────────────────────────
-f1, f2, f3 = st.columns([1, 3, 0.6], vertical_alignment="bottom")
+f1, f2, f3, f4 = st.columns([1, 2, 1.4, 0.6], vertical_alignment="bottom")
 range_name = f1.selectbox("Time range", list(RANGES), index=1)
 all_types = sorted(items["source_type"].unique())
 types = f2.multiselect("Source type", all_types, default=all_types)
-if f3.button("↻ Refresh", width="stretch"):
+countries = f3.multiselect("Country", sorted(items["country"].dropna().unique()),
+                           help="The country an item is mainly about, as identified by the analyzer")
+if f4.button("↻ Refresh", width="stretch"):
     st.cache_data.clear()
     st.rerun()
+search = st.text_input("Search", placeholder="keyword in the headline, text or summary — e.g. election, ডেঙ্গু")
 
 hours = RANGES[range_name]
 now = pd.Timestamp.now(tz=TZ).tz_localize(None)
 df = items[(items["ts"] >= now - pd.Timedelta(hours=hours)) & items["source_type"].isin(types)]
+if countries:
+    df = df[df["country"].isin(countries)]
+if search.strip():
+    haystack = (df["title"].fillna("") + " " + df["text"].fillna("") + " " + df["summary"].fillna("")).str.lower()
+    df = df[haystack.str.contains(search.strip().lower(), regex=False)]
 neg = df[df["sentiment"] == "negative"]
 if df.empty:
-    st.warning("No items in this range. Pick a longer time range.")
+    st.warning("Nothing matches these filters. Try a longer time range, or clear the country/search filter.")
     st.stop()
 
 # ─── Alert status (same rule as the ticket check) ─────────────────────────────
@@ -218,6 +226,24 @@ with c3:
         width="stretch",
     )
 with c4:
+    st.subheader("Negative items by country")
+    by_country = neg["country"].dropna()
+    if by_country.empty:
+        st.caption("No country identified for these items yet — run `python main.py analyze` after an update.")
+    else:
+        cdf = by_country.value_counts().head(12).rename_axis("country").reset_index(name="count")
+        base = alt.Chart(cdf).encode(
+            y=alt.Y("country:N", sort="-x", title=None),
+            x=alt.X("count:Q", title="Negative items", axis=alt.Axis(tickMinStep=1)),
+            tooltip=[alt.Tooltip("country:N", title="Country"), alt.Tooltip("count:Q", title="Negative items")],
+        )
+        st.altair_chart(
+            (base.mark_bar(color=NEG, cornerRadiusEnd=4, height={"band": 0.7})
+             + base.mark_text(align="left", dx=4, color=MUTED).encode(text="count:Q")).properties(height=300),
+            width="stretch",
+        )
+
+with st.container():
     st.subheader("Top sources of negative content")
     if neg.empty:
         st.caption("No negative items in this range.")
@@ -248,13 +274,13 @@ view = view.assign(
 )
 st.dataframe(
     view.sort_values(["severity", "ts"], ascending=[False, False])[
-        ["ts", "severity", "category_label", "headline", "summary", "credibility", "cred_reason",
+        ["ts", "severity", "category_label", "country", "headline", "summary", "credibility", "cred_reason",
          "factcheck", "factcheck_url", "source", "source_type", "url", "analyzer"]],
     hide_index=True, width="stretch",
     column_config={
         "ts": st.column_config.DatetimeColumn("Time", format="D MMM, h:mm a"),
         "severity": st.column_config.ProgressColumn("Severity", min_value=0, max_value=5, format="%d"),
-        "category_label": "Type", "headline": "Headline / text", "summary": "Summary",
+        "category_label": "Type", "country": "Country", "headline": "Headline / text", "summary": "Summary",
         "credibility": st.column_config.ProgressColumn(
             "Credibility", min_value=0, max_value=100, format="%d",
             help="Not a truth score. Combines published fact-checks, how many independent sources carry the "

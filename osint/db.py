@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS items (
     severity     INTEGER,         -- 1..5 for negative, 0 otherwise
     summary      TEXT,
     analyzer     TEXT,
+    country      TEXT,            -- ISO country the item is mainly about; NULL = not identified
     -- Credibility check (negative items only); NULL = not checked yet
     corroboration      INTEGER,   -- how many distinct sources carry the same story
     credibility        INTEGER,   -- 0..100
@@ -69,6 +70,7 @@ def hours_ago(hours: float) -> str:
 
 # Columns added after the first release; databases created earlier are upgraded in place
 LATER_COLUMNS = {
+    "country": "TEXT",
     "corroboration": "INTEGER", "credibility": "INTEGER", "cred_reason": "TEXT",
     "factcheck_rating": "TEXT", "factcheck_publisher": "TEXT", "factcheck_url": "TEXT",
     "checked_at": "TEXT",
@@ -110,7 +112,7 @@ def unanalyzed(conn: sqlite3.Connection, limit: int) -> list[dict]:
 def save_analysis(conn: sqlite3.Connection, results: list[dict]) -> None:
     conn.executemany(
         """UPDATE items SET sentiment=:sentiment, score=:score, category=:category,
-                            severity=:severity, summary=:summary, analyzer=:analyzer
+                            severity=:severity, summary=:summary, analyzer=:analyzer, country=:country
            WHERE id=:id""",
         results,
     )
@@ -140,12 +142,12 @@ def prune(conn: sqlite3.Connection, days: float) -> int:
     return n
 
 
-def reset_analysis(conn: sqlite3.Connection, analyzer: str = "lexicon") -> int:
-    """Mark items analyzed by `analyzer` as pending so the next analyze pass redoes them."""
-    n = conn.execute(
-        "UPDATE items SET sentiment=NULL, score=NULL, category=NULL, severity=NULL, summary=NULL, analyzer=NULL "
-        "WHERE analyzer = ?", (analyzer,)
-    ).rowcount
+def reset_analysis(conn: sqlite3.Connection, analyzer: str | None = "lexicon") -> int:
+    """Mark items as pending so the next analyze pass redoes them. analyzer=None means every item."""
+    clear = ("UPDATE items SET sentiment=NULL, score=NULL, category=NULL, severity=NULL, summary=NULL, "
+             "analyzer=NULL, country=NULL")
+    n = (conn.execute(clear).rowcount if analyzer is None
+         else conn.execute(f"{clear} WHERE analyzer = ?", (analyzer,)).rowcount)
     conn.commit()
     return n
 

@@ -76,6 +76,18 @@ Score kokhonoi 0 ba 100 hoy na. Beshi score mane "emon source-e ache jara shadha
 
 Dashboard-er Negative items table-e **"Only doubtful (credibility < 40)"** tick korle shudhu shondehojonok item-gulo dekhabe. Ticket email-eo low-credibility ar fact-check verdict dekhano hoy.
 
+## Country filter ar keyword search
+
+Dashboard-er upore tinta filter ache: **Time range**, **Source type**, **Country**, ar ekta **Search** box.
+
+- **Country:** protiti item kon desh niye, analyzer sheta ber kore (ISO code, jemon BD, IN, US). Gemini/Claude eta bhalo bojhe (Gaza-ke PS dhore); LLM key na thakle ~50-ta desh-er nam/shohor/neta-r keyword diye ondaj kora hoy. Kono desh-er shathe na milleli khali thake.
+- **Search:** headline, text ar summary-te lekha khoje. Bangla-o kaaj kore, jemon `ডেঙ্গু`.
+- Filter-gulo chart ar table, duitatei kaaj kore. Ar "Negative items by country" chart-e kon desh-er khobor beshi negative sheta dekha jay.
+
+Purono item-e country khali thakle ekbar chalao (free, LLM call lagbe na): `main.py analyze --countries`.
+
+**Notun keyword collect korte** — mane oi keyword-er notun khobor ana — [config.yaml](config.yaml)-e `google_news.feeds`-e `{ query: "your keyword" }` ar `reddit.searches`-e keyword add koro. Search box shudhu ja collect kora hoyeche tar moddhe khoje.
+
 ### Fact Check API enable korte hobe (free)
 
 1. https://console.cloud.google.com/apis/library/factchecktools.googleapis.com e jao (ekই project jekhane YouTube API enable korecho).

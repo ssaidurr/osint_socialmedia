@@ -165,8 +165,69 @@ class _Matcher:
         return n
 
 
+
+# Countries, for the offline analyzer. Gemini/Claude answer this far better; this is the fallback.
+# Latin terms match on word boundaries, Bangla terms as substrings (see _Matcher).
+COUNTRY_TERMS: dict[str, list[str]] = {
+    "BD": ["bangladesh*", "dhaka", "chittagong", "chattogram", "বাংলাদেশ", "ঢাকা", "চট্টগ্রাম"],
+    "IN": ["india", "indian*", "delhi", "mumbai", "kolkata", "modi", "ভারত", "দিল্লি", "কলকাতা"],
+    "PK": ["pakistan*", "islamabad", "karachi", "lahore", "পাকিস্তান", "ইসলামাবাদ"],
+    "CN": ["china", "chinese", "beijing", "shanghai", "xi jinping", "চীন", "বেইজিং"],
+    "US": ["united states", "u.s.", "usa", "america", "american*", "washington", "new york", "trump",
+           "যুক্তরাষ্ট্র", "আমেরিকা", "ওয়াশিংটন"],
+    "GB": ["britain", "british", "united kingdom", "england", "london", "scotland", "wales",
+           "যুক্তরাজ্য", "ব্রিটেন", "লন্ডন"],
+    "RU": ["russia", "russian*", "moscow", "putin", "kremlin", "রাশিয়া", "মস্কো"],
+    "UA": ["ukraine", "ukrainian*", "kyiv", "kiev", "zelensky", "ইউক্রেন", "কিয়েভ"],
+    "IL": ["israel", "israeli*", "tel aviv", "netanyahu", "ইসরায়েল"],
+    "PS": ["palestin*", "gaza", "west bank", "hamas", "ফিলিস্তিন", "গাজা"],
+    "IR": ["iran", "iranian*", "tehran", "ইরান", "তেহরান"],
+    "SA": ["saudi*", "riyadh", "সৌদি"],
+    "AE": ["united arab emirates", "uae", "dubai", "abu dhabi", "আমিরাত", "দুবাই"],
+    "QA": ["qatar*", "doha", "কাতার"],
+    "TR": ["turkey", "turkish", "t\u00fcrkiye", "ankara", "istanbul", "erdogan", "তুরস্ক"],
+    "EG": ["egypt*", "cairo", "মিসর", "মিশর"],
+    "AF": ["afghanistan", "afghan*", "kabul", "taliban", "আফগানিস্তান", "কাবুল"],
+    "MM": ["myanmar", "burma", "burmese", "rohingya", "rakhine", "মিয়ানমার", "রোহিঙ্গা"],
+    "NP": ["nepal*", "kathmandu", "নেপাল"],
+    "LK": ["sri lanka*", "colombo", "শ্রীলঙ্কা"],
+    "JP": ["japan*", "tokyo", "জাপান", "টোকিও"],
+    "KR": ["south korea*", "seoul", "দক্ষিণ কোরিয়া"],
+    "KP": ["north korea*", "pyongyang", "kim jong", "উত্তর কোরিয়া"],
+    "AU": ["australia*", "sydney", "melbourne", "canberra", "অস্ট্রেলিয়া"],
+    "NZ": ["new zealand", "wellington", "auckland"],
+    "CA": ["canada", "canadian*", "ottawa", "toronto", "কানাডা"],
+    "FR": ["france", "french", "paris", "macron", "ফ্রান্স", "প্যারিস"],
+    "DE": ["germany", "german*", "berlin", "জার্মানি", "বার্লিন"],
+    "IT": ["italy", "italian*", "rome", "ইতালি"],
+    "ES": ["spain", "spanish", "madrid", "barcelona", "স্পেন"],
+    "NL": ["netherlands", "dutch", "amsterdam", "নেদারল্যান্ড"],
+    "SE": ["sweden", "swedish", "stockholm", "সুইডেন"],
+    "PL": ["poland", "polish", "warsaw", "পোল্যান্ড"],
+    "BR": ["brazil*", "brasilia", "sao paulo", "ব্রাজিল"],
+    "AR": ["argentina", "argentine", "buenos aires", "আর্জেন্টিনা"],
+    "MX": ["mexico", "mexican*", "আমেক্সিকো", "মেক্সিকো"],
+    "ZA": ["south africa*", "johannesburg", "pretoria", "দক্ষিণ আফ্রিকা"],
+    "NG": ["nigeria*", "lagos", "abuja", "নাইজেরিয়া"],
+    "KE": ["kenya*", "nairobi", "কেনিয়া"],
+    "ET": ["ethiopia*", "addis ababa", "ইথিওপিয়া"],
+    "SD": ["sudan*", "khartoum", "সুদান"],
+    "SY": ["syria*", "damascus", "সিরিয়া"],
+    "IQ": ["iraq*", "baghdad", "ইরাক"],
+    "LB": ["lebanon", "lebanese", "beirut", "hezbollah", "লেবানন"],
+    "YE": ["yemen*", "sanaa", "houthi*", "ইয়েমেন", "হুতি"],
+    "ID": ["indonesia*", "jakarta", "ইন্দোনেশিয়া"],
+    "MY": ["malaysia*", "kuala lumpur", "মালয়েশিয়া"],
+    "PH": ["philippines", "filipino*", "manila", "ফিলিপাইন"],
+    "TH": ["thailand", "thai", "bangkok", "থাইল্যান্ড"],
+    "VN": ["vietnam*", "hanoi", "ভিয়েতনাম"],
+    "SG": ["singapore*", "সিঙ্গাপুর"],
+}
+
+
 _CAT_MATCHERS = {cat: _Matcher(terms) for cat, terms in CATEGORY_TERMS.items()}
 _TOPIC_MATCHERS = {cat: _Matcher(CATEGORY_TOPICS.get(cat, [])) for cat in CATEGORY_TERMS}
+_COUNTRY_MATCHERS = {code: _Matcher(terms) for code, terms in COUNTRY_TERMS.items()}
 _GENERIC, _FATAL, _POSITIVE = _Matcher(GENERIC_NEGATIVE), _Matcher(FATAL), _Matcher(POSITIVE)
 # A death *sentence* is not a death — keep it out of the fatal count
 DEATH_SENTENCE_RE = re.compile(_nfc("মৃত্যুদণ্ড") + r"|sentenc\w*[^.]*?\bto death", re.IGNORECASE)
@@ -199,8 +260,11 @@ def lexicon_analyze(item: dict) -> dict:
     else:
         sentiment = "positive" if score >= 0.2 else "neutral"
         category, severity = "none", 0
+    hits = {code: m.count(text) for code, m in _COUNTRY_MATCHERS.items()}
+    best_country = max(hits, key=hits.get)
     return {"id": item["id"], "sentiment": sentiment, "score": score, "category": category,
-            "severity": severity, "summary": None, "analyzer": "lexicon"}
+            "severity": severity, "summary": None, "analyzer": "lexicon",
+            "country": best_country if hits[best_country] else None}
 
 
 # ─── Claude analyzer ──────────────────────────────────────────────────────────
@@ -211,6 +275,7 @@ For every item return:
 - score: from -1.0 (very negative) to 1.0 (very positive).
 - category: for negative items, the single best-fitting category key below; "none" for neutral or positive items.
 - severity: for negative items, 1 (minor, local) to 5 (mass casualties or a national-scale crisis); 0 for neutral or positive items.
+- country: the ISO 3166-1 alpha-2 code of the country the item is mainly about (e.g. "US", "BD", "IN"). Use "XX" when it is global, about an organisation, or unclear.
 - summary: one short line in Bangla saying what the item is about.
 
 Categories:
@@ -231,9 +296,10 @@ RESULT_SCHEMA = {
                     "score": {"type": "number"},
                     "category": {"type": "string", "enum": [*CATEGORIES, "none"]},
                     "severity": {"type": "integer"},
+                    "country": {"type": "string"},
                     "summary": {"type": "string"},
                 },
-                "required": ["id", "sentiment", "score", "category", "severity", "summary"],
+                "required": ["id", "sentiment", "score", "category", "severity", "country", "summary"],
                 "additionalProperties": False,
             },
         }
@@ -259,6 +325,12 @@ def _user_message(batch: list[dict]) -> str:
     return "<items>\n" + json.dumps(payload, ensure_ascii=False) + "\n</items>"
 
 
+def _country_code(value: str | None) -> str | None:
+    """Two-letter ISO code, or None for the model's 'XX' / anything unexpected."""
+    code = (value or "").strip().upper()
+    return code if len(code) == 2 and code.isalpha() and code != "XX" else None
+
+
 def _normalize(results: list[dict], batch: list[dict], analyzer: str) -> dict[str, dict]:
     """Validate LLM output into db rows. Ids the model skipped are left for the lexicon fallback."""
     valid_ids = {it["id"] for it in batch}
@@ -275,6 +347,7 @@ def _normalize(results: list[dict], batch: list[dict], analyzer: str) -> dict[st
             "category": category if negative else "none",
             "severity": max(1, min(5, int(r["severity"]))) if negative else 0,
             "summary": (r.get("summary") or "").strip() or None,
+            "country": _country_code(r.get("country")),
             "analyzer": analyzer,
         }
     return out
@@ -411,6 +484,23 @@ def _make_llm(provider: str, acfg: dict):
     if provider == "claude":
         return ClaudeAnalyzer(acfg.get("claude_model", "claude-opus-5"), acfg.get("claude_effort", "low"))
     return None
+
+
+def backfill_country(conn) -> int:
+    """Fill `country` for already-analyzed items using the offline matcher — free and instant.
+    Newly analyzed items get the country from the LLM, which is more accurate."""
+    rows = [dict(r) for r in conn.execute(
+        "SELECT id, title, text FROM items WHERE sentiment IS NOT NULL AND country IS NULL")]
+    updates = []
+    for item in rows:
+        text = _nfc(_item_text(item))
+        hits = {code: m.count(text) for code, m in _COUNTRY_MATCHERS.items()}
+        best = max(hits, key=hits.get)
+        if hits[best]:
+            updates.append({"id": item["id"], "country": best})
+    conn.executemany("UPDATE items SET country = :country WHERE id = :id", updates)
+    conn.commit()
+    return len(updates)
 
 
 def analyze_pending(conn, cfg: dict) -> dict:
