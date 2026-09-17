@@ -204,7 +204,7 @@ def lexicon_analyze(item: dict) -> dict:
 
 
 # ─── Claude analyzer ──────────────────────────────────────────────────────────
-SYSTEM_PROMPT = """You classify Bangladeshi news headlines and social-media posts/comments for a public-sentiment monitoring dashboard. Items can be in Bangla, English, or Banglish (Bangla written in Latin script).
+SYSTEM_PROMPT = """You classify news headlines and social-media posts/comments from around the world for a public-sentiment monitoring dashboard. Items can be in any language, including Bangla and Banglish (Bangla written in Latin script).
 
 For every item return:
 - sentiment: "negative", "neutral" or "positive" — the tone of the event or opinion from the public's point of view. Reports of deaths, crime, disasters, unrest, price hikes or corruption are negative even when written in a neutral reporting style.

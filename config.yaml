@@ -4,43 +4,58 @@
 timezone: Asia/Dhaka          # used for display in emails and the dashboard
 retention_days: 30            # items older than this are deleted so the database stays small (matters on GitHub)
 
-# Google News search. Each query is searched for news from the last `window`.
+# Google News. `topic` pulls a whole section, `query` searches a keyword.
+# Topics: TOP, WORLD, NATION, BUSINESS, TECHNOLOGY, SCIENCE, HEALTH, SPORTS, ENTERTAINMENT
 google_news:
-  country: BD
+  lang: en
+  country: US
   window: 1d
-  queries:
-    - { query: "Bangladesh", lang: en }
-    - { query: "বাংলাদেশ", lang: bn }
-    # - { query: "Dhaka", lang: en }
-    # - { query: "আপনার ব্র্যান্ড/কোম্পানির নাম", lang: bn }
+  feeds:
+    - { topic: TOP }
+    - { topic: WORLD }
+    - { topic: BUSINESS }
+    - { topic: HEALTH }
+    - { topic: WORLD, country: GB }     # UK edition — same section, different newsroom mix
+    - { topic: WORLD, country: IN }     # India edition
+    # - { query: "your brand or topic" }
+    # - { query: "বাংলাদেশ", lang: bn, country: BD }
 
-# Direct RSS feeds from news sites
 rss_feeds:
-  - { name: "Prothom Alo", url: "https://www.prothomalo.com/feed/" }
-  - { name: "The Daily Star", url: "https://www.thedailystar.net/frontpage/rss.xml" }
-  - { name: "Risingbd", url: "https://www.risingbd.com/rss/rss.xml" }
-  - { name: "TBS News", url: "https://www.tbsnews.net/rss.xml" }
-  # Most other BD outlets (Kaler Kantho, Samakal, Ittefaq, Jugantor, Dhaka Post, UNB, New Age,
-  # Somoy, Jagonews24, Banglanews24) either block bots or no longer publish a working feed.
-  # Google News below still picks their stories up.
+  - { name: "BBC World", url: "https://feeds.bbci.co.uk/news/world/rss.xml" }
+  - { name: "Al Jazeera", url: "https://www.aljazeera.com/xml/rss/all.xml" }
+  - { name: "The Guardian", url: "https://www.theguardian.com/world/rss" }
+  - { name: "New York Times", url: "https://rss.nytimes.com/services/xml/rss/nyt/World.xml" }
+  - { name: "CNN", url: "http://rss.cnn.com/rss/edition_world.rss" }
+  - { name: "NPR", url: "https://feeds.npr.org/1004/rss.xml" }
+  - { name: "Deutsche Welle", url: "https://rss.dw.com/rdf/rss-en-all" }
+  - { name: "France 24", url: "https://www.france24.com/en/rss" }
+  - { name: "Sky News", url: "https://feeds.skynews.com/feeds/rss/world.xml" }
+  - { name: "Times of India", url: "https://timesofindia.indiatimes.com/rssfeeds/296589292.cms" }
+  - { name: "ABC (Australia)", url: "https://www.abc.net.au/news/feed/51120/rss.xml" }
+  # Bangladesh feeds — uncomment to put them back in the mix:
+  # - { name: "Prothom Alo", url: "https://www.prothomalo.com/feed/" }
+  # - { name: "The Daily Star", url: "https://www.thedailystar.net/frontpage/rss.xml" }
+  # - { name: "Risingbd", url: "https://www.risingbd.com/rss/rss.xml" }
+  # - { name: "TBS News", url: "https://www.tbsnews.net/rss.xml" }
 
 # Public Reddit posts + latest comments (no login needed)
 reddit:
-  subreddits: [bangladesh, dhaka]
+  subreddits: [worldnews, news]
   include_comments: true
-  searches: ["bangladesh", "dhaka"]   # keyword search across all of Reddit, not just the subreddits above
+  searches: []                  # keyword search across all of Reddit, e.g. ["your brand"]
   search_limit: 25
 
 # Public Telegram channels. No API key: the channel's public preview page is read.
-# Private channels and groups are not readable. Add usernames without the @.
+# Most big outlets abandoned Telegram (CNN, AP, France 24 last posted in 2023).
+# rtnews and sputniknews are still active but state-run — add them only if you want that in the mix.
 telegram:
-  channels: [thedailystar, prothomalo, tbsnews]
+  channels: [bloomberg]
   limit: 40
 
 # Public Mastodon hashtag timelines (open, no key)
 mastodon:
   instances: [mastodon.social]
-  tags: [bangladesh, dhaka]
+  tags: [news, worldnews, politics]
   limit: 40
 
 # YouTube videos + comments. Needs YOUTUBE_API_KEY in .env (free, Google Cloud Console).
@@ -48,7 +63,8 @@ mastodon:
 # Free quota: search.list is capped at 100 calls/day and every run uses one call per query,
 # so YouTube only runs every `every_minutes` (2 queries x 24 runs = 48 calls/day).
 youtube:
-  queries: ["Bangladesh news", "বাংলাদেশ খবর"]
+  queries: ["world news", "breaking news"]
+  region: ""                    # "" = worldwide; "US", "GB", "BD" ... to bias one country
   max_results: 15
   comments_per_video: 20
   lookback_hours: 24
@@ -66,7 +82,7 @@ analyzer:
 
 # ─── Credibility check (negative items) ───────────────────────────────────────
 # NOT a "% true" score — nothing can compute that. It combines three measurable signals:
-#   1. published fact-checks (Rumor Scanner, BOOM, AFP, ...) matching the claim
+#   1. published fact-checks (Rumor Scanner, BOOM, AFP, Snopes, ...) matching the claim
 #   2. how many independent sources carry the same story
 #   3. what kind of source it is (established outlet vs. an unknown site vs. a comment)
 credibility:
@@ -86,6 +102,36 @@ credibility:
   max_items_per_run: 120
   # Sources treated as established (substring match, case-insensitive)
   trusted_sources:
+    - Reuters
+    - Associated Press
+    - AP News
+    - AFP
+    - BBC
+    - Al Jazeera
+    - The Guardian
+    - New York Times
+    - Washington Post
+    - CNN
+    - NPR
+    - NBC News
+    - CBS News
+    - ABC News
+    - Sky News
+    - Deutsche Welle
+    - France 24
+    - Bloomberg
+    - Financial Times
+    - The Economist
+    - Politico
+    - Axios
+    - Times of India
+    - The Hindu
+    - South China Morning Post
+    - Kyodo
+    - Anadolu
+    - ReliefWeb
+    - t.me/bloomberg          # a newsroom's own Telegram channel counts as that newsroom
+    # Bangladesh outlets
     - Prothom Alo
     - প্রথম আলো
     - The Daily Star
@@ -102,21 +148,9 @@ credibility:
     - Banglanews24
     - Jagonews24
     - Daily Sun
-    - Financial Express
-    - Reuters
-    - Associated Press
-    - AFP
-    - BBC
-    - Al Jazeera
-    - Anadolu
-    - Deutsche Welle
-    - ReliefWeb
-    - UNB
     - Risingbd
     - TBS News
-    - t.me/thedailystar        # a newspaper's own Telegram channel counts as that newspaper
-    - t.me/prothomalo
-    - t.me/tbsnews
+    - UNB
 
 # ─── Ticket / email alert ─────────────────────────────────────────────────────
 # A ticket is created (and emailed) when, within the last `window_hours`:
@@ -127,7 +161,9 @@ alert:
   recipients: [ffoisall@gmail.com]
   window_hours: 6
   min_items: 20
-  negative_ratio_threshold: 0.40
+  # Global news runs ~42% negative on an ordinary day (measured), so 0.40 would fire on almost every
+  # run. 0.55 means "well above the normal background". Focused on one country or brand, lower it.
+  negative_ratio_threshold: 0.55
   min_negative_count: 10
   cooldown_hours: 6           # no repeat ticket within this time...
   escalation_delta: 0.15      # ...unless the negative share rose by this much since the last ticket

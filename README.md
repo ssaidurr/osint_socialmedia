@@ -13,19 +13,23 @@ Collect ──► Analyze ──────────────────
 
 ## Ki ki collect hoy
 
+Default-e **global** news ar social media monitor kore. Kono ekta desh, brand ba bishoy-e focus korte chaile [config.yaml](config.yaml)-e query/feed bodle nin (Bangladesh-er feed-gulo comment kora ache, uncomment korlei chalu).
+
 | Source | Ki pay | Setup |
 |---|---|---|
-| Google News | Keyword diye search kora news (English + বাংলা) | Kichu lagbe na |
-| News RSS | Prothom Alo, The Daily Star, Risingbd, TBS News | Kichu lagbe na |
-| Reddit (subreddit) | r/bangladesh, r/dhaka-er notun post **ar comment** | Kichu lagbe na |
+| Google News | Topic feed (TOP, WORLD, BUSINESS, HEALTH) + US/UK/India edition, ar chaile keyword search | Kichu lagbe na |
+| News RSS | BBC, Al Jazeera, Guardian, NYT, CNN, NPR, DW, France 24, Sky News, Times of India, ABC (AU) | Kichu lagbe na |
+| Reddit (subreddit) | r/worldnews, r/news-er notun post **ar comment** | Kichu lagbe na |
 | Reddit (search) | Puro Reddit-e keyword diye khoja notun post | Kichu lagbe na |
-| Telegram | Public channel-er post (thedailystar, prothomalo, tbsnews) | Kichu lagbe na — channel-er public preview page pora hoy |
-| Mastodon | Public hashtag timeline (#bangladesh, #dhaka) | Kichu lagbe na |
-| YouTube | Video + comment | `YOUTUBE_API_KEY` (free, niche dekhun) |
+| Telegram | Public channel-er post (default: Bloomberg) | Kichu lagbe na — channel-er public preview page pora hoy |
+| Mastodon | Public hashtag timeline (#news, #worldnews, #politics) | Kichu lagbe na |
+| YouTube | Video + comment (default worldwide) | `YOUTUBE_API_KEY` (free, niche dekhun) |
 
 Reddit unauthenticated request-e kothin rate limit (429) dey. Ekta feed fail korle baki source-gulo thik-i chole, ar oi feed porer run-e chesta kore.
 
-**Onno BD outlet-er RSS:** Kaler Kantho, Samakal, Ittefaq, Jugantor, Dhaka Post, UNB, New Age, Somoy, Jagonews24, Banglanews24 — egulo hoy bot block kore, noy kaaj kora RSS feed nei. Tobe Google News egulor khobor ene dey.
+**Telegram niye ekta kotha:** boro outlet-er beshirbhag channel ekhon nishkriyo (CNN, AP, France 24-er shesh post 2023 saal-er). RT ar Sputnik active, kintu rashtro-niyontrito — tai default-e rakha hoyni.
+
+**Bangladesh-er RSS:** Prothom Alo, Daily Star, Risingbd, TBS News kaaj kore ([config.yaml](config.yaml)-e comment kora ache). Kaler Kantho, Samakal, Ittefaq, Jugantor, Dhaka Post, UNB, New Age, Somoy, Jagonews24, Banglanews24 — egulo hoy bot block kore, noy kaaj kora RSS feed nei. Tobe Google News egulor khobor ene dey.
 
 ### Ja add kora jay ni (ar keno)
 

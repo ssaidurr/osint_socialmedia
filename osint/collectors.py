@@ -92,6 +92,14 @@ def google_news(query: str, lang: str, country: str, window: str) -> list[dict]:
     return _news_items(url, "Google News", from_google=True)
 
 
+def google_news_topic(topic: str, lang: str, country: str) -> list[dict]:
+    """Google News section feeds: TOP (top stories), WORLD, BUSINESS, TECHNOLOGY, SCIENCE, HEALTH, SPORTS."""
+    tail = f"hl={lang}-{country}&gl={country}&ceid={country}:{lang}"
+    url = (f"https://news.google.com/rss?{tail}" if topic.upper() == "TOP"
+           else f"https://news.google.com/rss/headlines/section/topic/{topic.upper()}?{tail}")
+    return _news_items(url, "Google News", from_google=True)
+
+
 def rss_feed(name: str, url: str) -> list[dict]:
     return _news_items(url, name)
 
@@ -119,15 +127,17 @@ def reddit(subreddit: str, source_type: str) -> list[dict]:
     return out
 
 
-def youtube(query: str, api_key: str, max_results: int, comments_per_video: int, lookback_hours: float) -> list[dict]:
+def youtube(query: str, api_key: str, max_results: int, comments_per_video: int,
+            lookback_hours: float, region: str | None = None) -> list[dict]:
     collected, out = now_utc(), []
     after = (datetime.now(timezone.utc) - timedelta(hours=lookback_hours)).strftime("%Y-%m-%dT%H:%M:%SZ")
     # Key goes in a header, not the URL: requests puts the URL in error messages, which end up in logs
     headers = {"X-Goog-Api-Key": api_key}
-    r = requests.get(f"{YT_API}/search", timeout=20, headers=headers, params={
-        "part": "snippet", "q": query, "type": "video", "order": "date", "regionCode": "BD",
-        "maxResults": max_results, "publishedAfter": after,
-    })
+    params = {"part": "snippet", "q": query, "type": "video", "order": "date",
+              "maxResults": max_results, "publishedAfter": after}
+    if region:  # leave unset for worldwide results
+        params["regionCode"] = region
+    r = requests.get(f"{YT_API}/search", timeout=20, headers=headers, params=params)
     r.raise_for_status()
     for v in r.json().get("items", []):
         vid, sn = v["id"]["videoId"], v["snippet"]
@@ -178,9 +188,14 @@ def collect_all(cfg: dict, conn=None) -> tuple[list[dict], dict[str, int | str]]
     `conn` lets rate-limited sources (YouTube) remember when they last ran."""
     jobs = []
     gn = cfg.get("google_news") or {}
-    for q in gn.get("queries", []):
-        jobs.append((f"Google News: {q['query']}",
-                     lambda q=q: google_news(q["query"], q.get("lang", "en"), gn.get("country", "BD"), gn.get("window", "1d"))))
+    for entry in (gn.get("feeds") or gn.get("queries") or []):
+        lang, country = entry.get("lang", gn.get("lang", "en")), entry.get("country", gn.get("country", "US"))
+        if entry.get("topic"):
+            jobs.append((f"Google News topic: {entry['topic']}",
+                         lambda t=entry["topic"], l=lang, c=country: google_news_topic(t, l, c)))
+        else:
+            jobs.append((f"Google News: {entry['query']}",
+                         lambda q=entry["query"], l=lang, c=country: google_news(q, l, c, gn.get("window", "1d"))))
     for f in cfg.get("rss_feeds") or []:
         jobs.append((f"RSS: {f['name']}", lambda f=f: rss_feed(f["name"], f["url"])))
     rd = cfg.get("reddit") or {}
@@ -210,7 +225,8 @@ def collect_all(cfg: dict, conn=None) -> tuple[list[dict], dict[str, int | str]]
         if _youtube_due(conn, every):
             for q in yt["queries"]:
                 jobs.append((f"YouTube: {q}", lambda q=q: youtube(
-                    q, yt_key, yt.get("max_results", 15), yt.get("comments_per_video", 20), yt.get("lookback_hours", 24))))
+                    q, yt_key, yt.get("max_results", 15), yt.get("comments_per_video", 20),
+                    yt.get("lookback_hours", 24), yt.get("region") or None)))
             if conn is not None:
                 set_state(conn, "youtube_last_run", now_utc())
         else:
