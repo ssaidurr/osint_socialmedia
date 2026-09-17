@@ -111,8 +111,11 @@ f1, f2, f3, f4 = st.columns([1, 2, 1.4, 0.6], vertical_alignment="bottom")
 range_name = f1.selectbox("Time range", list(RANGES), index=1)
 all_types = sorted(items["source_type"].unique())
 types = f2.multiselect("Source type", all_types, default=all_types)
-countries = f3.multiselect("Country", sorted(items["country"].dropna().unique()),
+country_options = sorted(items["country"].dropna().unique())
+countries = f3.multiselect("Country", country_options, disabled=not country_options,
                            help="The country an item is mainly about, as identified by the analyzer")
+if not country_options:
+    f3.caption("No country data yet — it is filled on the next monitor run.")
 if f4.button("↻ Refresh", width="stretch"):
     st.cache_data.clear()
     st.rerun()
