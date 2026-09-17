@@ -28,6 +28,7 @@ def category_label(key: str | None) -> str:
 
 
 def ticket_level(stats: dict, threshold: float) -> str:
+    threshold = stats.get("required_ratio") or threshold
     if stats["ratio"] >= threshold + 0.25 or stats["avg_severity"] >= 4:
         return "CRITICAL"
     if stats["ratio"] >= threshold + 0.10 or stats["avg_severity"] >= 3:
@@ -35,15 +36,36 @@ def ticket_level(stats: dict, threshold: float) -> str:
     return "MEDIUM"
 
 
+def required_ratio(conn, cfg: dict) -> tuple[float, float | None]:
+    """How negative this window must be to raise a ticket, and the baseline it was derived from.
+
+    A fixed number alone does not work: an ordinary news day sits anywhere between 35% and 59%
+    negative. So the bar is "well above this feed's own recent normal", with the configured
+    threshold as a floor so a quiet week can't make the bar trivially low."""
+    a = cfg["alert"]
+    floor = a["negative_ratio_threshold"]
+    delta = a.get("baseline_delta", 0)
+    days = a.get("baseline_days", 7)
+    if not delta or not days:
+        return floor, None
+    baseline, sample = db.ratio_between(conn, db.hours_ago(days * 24), db.hours_ago(a["window_hours"]))
+    if baseline is None or sample < a.get("baseline_min_items", 200):
+        return floor, None       # too little history to know what normal looks like
+    return max(floor, baseline + delta), baseline
+
+
 def evaluate(conn, cfg: dict) -> dict:
     """Decide whether the current window deserves a ticket. Pure read, no side effects."""
     a = cfg["alert"]
     stats = db.window_stats(conn, db.hours_ago(a["window_hours"]))
+    needed, baseline = required_ratio(conn, cfg)
+    stats["required_ratio"], stats["baseline_ratio"] = needed, baseline
     decision = {"stats": stats, "triggered": False}
     if stats["total"] < a["min_items"]:
         decision["reason"] = f"not enough data ({stats['total']} < {a['min_items']} items)"
-    elif stats["ratio"] < a["negative_ratio_threshold"]:
-        decision["reason"] = f"negative share {stats['ratio']:.0%} below {a['negative_ratio_threshold']:.0%}"
+    elif stats["ratio"] < needed:
+        of_baseline = f" (normal is {baseline:.0%})" if baseline is not None else ""
+        decision["reason"] = f"negative share {stats['ratio']:.0%} below {needed:.0%}{of_baseline}"
     elif stats["negative"] < a["min_negative_count"]:
         decision["reason"] = f"only {stats['negative']} negative items (< {a['min_negative_count']})"
     else:
@@ -130,6 +152,8 @@ def render_email(cfg: dict, ticket: dict, stats: dict, items: list[dict]) -> tup
                f"({stats['negative']}/{stats['total']}) — {window} — {ticket['id']}")
     created = to_local(ticket["created_at"], cfg)
     cats = sorted(stats["categories"].items(), key=lambda kv: -kv[1])
+    baseline_note = (f" Normal for the last {cfg['alert'].get('baseline_days', 7)} days is "
+                     f"<b>{stats['baseline_ratio']:.0%}</b>." if stats.get("baseline_ratio") is not None else "")
 
     def safe_url(url: str | None) -> str:  # feed-supplied links: never pass on javascript:/data: URLs
         return url if url and url.startswith(("https://", "http://")) else "#"
@@ -138,7 +162,8 @@ def render_email(cfg: dict, ticket: dict, stats: dict, items: list[dict]) -> tup
     lines = [
         f"Ticket: {ticket['id']}   Level: {level}   Created: {created}",
         f"Window: {window}   Negative: {stats['negative']} of {stats['total']} ({ratio:.0%})"
-        f"   Avg severity: {stats['avg_severity']:.1f}/5",
+        f"   Avg severity: {stats['avg_severity']:.1f}/5"
+        + (f"   Normal: {stats['baseline_ratio']:.0%}" if stats.get("baseline_ratio") is not None else ""),
         "", "Negative news by type:",
         *[f"  - {category_label(k)}: {n} ({n / stats['negative']:.0%})" for k, n in cats],
         "", "Top negative items:",
@@ -190,7 +215,7 @@ def render_email(cfg: dict, ticket: dict, stats: dict, items: list[dict]) -> tup
 </div>
 <p style="font-size:15px">Negative content crossed the alert threshold:
 <b style="font-size:22px">{ratio:.0%}</b> negative ({stats['negative']} of {stats['total']} items),
-average severity <b>{stats['avg_severity']:.1f}/5</b>.</p>
+average severity <b>{stats['avg_severity']:.1f}/5</b>.{baseline_note}</p>
 <h3 style="margin:20px 0 6px">কী ধরনের নেগেটিভ নিউজ (by type)</h3>
 <table style="border-collapse:collapse;font-size:14px">{cat_rows}</table>
 <h3 style="margin:20px 0 6px">Top negative items</h3>

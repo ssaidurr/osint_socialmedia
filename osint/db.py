@@ -186,6 +186,14 @@ def save_credibility(conn: sqlite3.Connection, rows: list[dict]) -> None:
     conn.commit()
 
 
+def ratio_between(conn: sqlite3.Connection, since: str, until: str) -> tuple[float | None, int]:
+    """Negative share over [since, until) — the normal background level to compare a window against."""
+    total, negative = conn.execute(
+        """SELECT COUNT(*), COALESCE(SUM(sentiment = 'negative'), 0) FROM items
+           WHERE sentiment IS NOT NULL AND ts >= ? AND ts < ?""", (since, until)).fetchone()
+    return (negative / total if total else None), total
+
+
 def window_stats(conn: sqlite3.Connection, since: str) -> dict:
     row = conn.execute(
         """SELECT COUNT(*) AS total,

@@ -132,12 +132,20 @@ if df.empty:
     st.stop()
 
 # ─── Alert status (same rule as the ticket check) ─────────────────────────────
-win = items[items["ts"] >= now - pd.Timedelta(hours=alert_cfg["window_hours"])]
+window_start = now - pd.Timedelta(hours=alert_cfg["window_hours"])
+win = items[items["ts"] >= window_start]
 win_share = (win["sentiment"] == "negative").mean() if len(win) else 0.0
+# Same rule as the ticket check: the bar is the floor or "recent normal + delta", whichever is higher
 thr = alert_cfg["negative_ratio_threshold"]
+baseline_days, baseline_delta = alert_cfg.get("baseline_days", 7), alert_cfg.get("baseline_delta", 0)
+past = items[(items["ts"] >= now - pd.Timedelta(days=baseline_days)) & (items["ts"] < window_start)]
+baseline = (past["sentiment"] == "negative").mean() if (
+    baseline_delta and len(past) >= alert_cfg.get("baseline_min_items", 200)) else None
+bar = max(thr, baseline + baseline_delta) if baseline is not None else thr
 status = (f"Last {alert_cfg['window_hours']}h: **{win_share:.0%}** negative "
-          f"({(win['sentiment'] == 'negative').sum()}/{len(win)}), alert threshold {thr:.0%}")
-if len(win) >= alert_cfg["min_items"] and win_share >= thr:
+          f"({(win['sentiment'] == 'negative').sum()}/{len(win)}), alert bar {bar:.0%}"
+          + (f" (normal {baseline:.0%} over {baseline_days}d)" if baseline is not None else ""))
+if len(win) >= alert_cfg["min_items"] and win_share >= bar:
     st.error(f"Alert level: {status}", icon="🚨")
 else:
     st.success(f"Normal: {status}", icon="✅")

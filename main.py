@@ -60,8 +60,10 @@ def credibility(conn, cfg, recheck: bool = False) -> None:
 def check(conn, cfg, dry_run: bool) -> None:
     d = check_and_alert(conn, cfg, dry_run=dry_run)
     s = d["stats"]
+    baseline = (f", normal {s['baseline_ratio']:.0%} over {cfg['alert'].get('baseline_days', 7)}d"
+                if s.get("baseline_ratio") is not None else "")
     print(f"Last {cfg['alert']['window_hours']}h: {s['negative']}/{s['total']} negative "
-          f"({s['ratio']:.0%}), threshold {cfg['alert']['negative_ratio_threshold']:.0%}")
+          f"({s['ratio']:.0%}), bar {s.get('required_ratio', 0):.0%}{baseline}")
     if not d["triggered"]:
         print(f"No ticket: {d['reason']}")
         return
@@ -76,6 +78,9 @@ def check(conn, cfg, dry_run: bool) -> None:
 def run(conn, cfg, dry_run: bool) -> None:
     print("── collect"); collect(conn, cfg)
     print("── analyze"); analyze(conn, cfg)
+    # Items analyzed before the country feature (or by an LLM that skipped it) get one offline pass
+    if filled := backfill_country(conn):
+        print(f"── country filled offline on {filled} older items")
     print("── credibility"); credibility(conn, cfg)
     print("── check");   check(conn, cfg, dry_run)
     if days := cfg.get("retention_days"):

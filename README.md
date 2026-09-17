@@ -161,8 +161,17 @@ Ticket raise hole email-er ekta copy `data/tickets/<ticket-id>.html`-e save hoy.
 
 Last `window_hours` (6h)-er moddhe jodi ei tinta shorto ek sathe mile, tahole ticket hobe:
 - total analyzed item ≥ `min_items` (20)
-- negative share ≥ `negative_ratio_threshold` (40%)
+- negative share ≥ **alert bar** (niche dekho)
 - negative item ≥ `min_negative_count` (10)
+
+**Alert bar ekta fixed number na.** Mepe dekha geche global news-e ghonta-prati negative share 35% theke 59% porjonto otha-nama kore. Fixed number boshale hoy protidin alert jabe, noy kokhono jabe na. Tai bar hoy ei duitar moddhe **jeta beshi**:
+
+- `negative_ratio_threshold` (50%) — ekta absolute floor, ar
+- **ei feed-er nijer shesh `baseline_days` (7 din)-er normal + `baseline_delta` (12 point)**
+
+Jemon: shesh 7 diner normal 37% hole bar hobe 50% (floor-ta beshi). Normal 48% hole bar hobe 60%. Terminal ar dashboard duitatei bar ar normal dekhano hoy, ar email-eo "Normal for the last 7 days is X%" lekha thake.
+
+Purono fixed-threshold behaviour chaile `baseline_delta: 0` kore dao.
 
 Spam atkate `cooldown_hours` (6h)-er moddhe notun ticket hobe na. Tobe negative share `escalation_delta` (15 percentage point) bere gele notun ticket hobe. Ticket level `MEDIUM`, `HIGH` ba `CRITICAL` hoy, negative share ar average severity dekhe.
 

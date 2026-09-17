@@ -161,9 +161,14 @@ alert:
   recipients: [ffoisall@gmail.com]
   window_hours: 6
   min_items: 20
-  # Global news runs ~42% negative on an ordinary day (measured), so 0.40 would fire on almost every
-  # run. 0.55 means "well above the normal background". Focused on one country or brand, lower it.
-  negative_ratio_threshold: 0.55
+  # An ordinary hour measures anywhere between 35% and 59% negative, so a fixed number alone either
+  # fires constantly or never. The bar is the HIGHER of:
+  #   negative_ratio_threshold  — an absolute floor, and
+  #   (the last `baseline_days` of this feed) + baseline_delta
+  negative_ratio_threshold: 0.50
+  baseline_days: 7            # what "normal" is measured over; 0 disables the baseline rule
+  baseline_delta: 0.12        # how far above normal counts as a spike (12 percentage points)
+  baseline_min_items: 200     # below this much history, fall back to the fixed floor
   min_negative_count: 10
   cooldown_hours: 6           # no repeat ticket within this time...
   escalation_delta: 0.15      # ...unless the negative share rose by this much since the last ticket
