@@ -4,6 +4,7 @@ Providers:
   * lexicon — offline, free: VADER for English plus Bangla/Banglish keyword lists.
   * gemini  — Gemini API (free tier): much better on Bangla, Banglish, sarcasm and context; adds a one-line summary.
   * claude  — Claude API (paid): same output as gemini.
+  * openai  — OpenAI API (paid, no free tier): same output again.
 Whenever an LLM call fails, the affected items fall back to the lexicon.
 """
 from __future__ import annotations
@@ -24,17 +25,17 @@ log = logging.getLogger(__name__)
 
 # Negative-news categories: key -> label shown in emails and the dashboard
 CATEGORIES: dict[str, str] = {
-    "crime": "অপরাধ ও আইনশৃঙ্খলা (Crime & law)",
-    "politics_unrest": "রাজনৈতিক সংঘর্ষ/অস্থিরতা (Political unrest)",
-    "accident": "দুর্ঘটনা (Accident)",
-    "disaster": "প্রাকৃতিক দুর্যোগ (Disaster)",
-    "health": "স্বাস্থ্য/রোগ (Health)",
-    "economy": "অর্থনীতি/দ্রব্যমূল্য (Economy)",
-    "corruption": "দুর্নীতি/প্রতারণা (Corruption & fraud)",
-    "security": "নিরাপত্তা/সন্ত্রাস (Security & terrorism)",
-    "social": "সামাজিক সমস্যা/নির্যাতন (Social issues & abuse)",
-    "sports": "খেলাধুলা (Sports)",
-    "other": "অন্যান্য (Other)",
+    "crime": "Crime & law",
+    "politics_unrest": "Political unrest",
+    "accident": "Accident",
+    "disaster": "Natural disaster",
+    "health": "Health & disease",
+    "economy": "Economy & prices",
+    "corruption": "Corruption & fraud",
+    "security": "Security & terrorism",
+    "social": "Social issues & abuse",
+    "sports": "Sports",
+    "other": "Other",
 }
 
 # ─── Lexicon analyzer ─────────────────────────────────────────────────────────
@@ -276,7 +277,7 @@ For every item return:
 - category: for negative items, the single best-fitting category key below; "none" for neutral or positive items.
 - severity: for negative items, 1 (minor, local) to 5 (mass casualties or a national-scale crisis); 0 for neutral or positive items.
 - country: the ISO 3166-1 alpha-2 code of the country the item is mainly about (e.g. "US", "BD", "IN"). Use "XX" when it is global, about an organisation, or unclear.
-- summary: one short line in Bangla saying what the item is about.
+- summary: one short line in English saying what the item is about. Always English, whatever language the item itself is in.
 
 Categories:
 {categories}
@@ -466,6 +467,46 @@ class GeminiAnalyzer:
         return _normalize(json.loads(response.text)["results"], batch, self.model)
 
 
+class OpenAIAnalyzer:
+    """OpenAI bills every call — there is no free tier. It is here for people who already pay
+    for it; otherwise Gemini's free tier covers this workload."""
+
+    def __init__(self, model: str):
+        import openai
+
+        self.openai = openai
+        self.client = openai.OpenAI()   # reads OPENAI_API_KEY
+        self.model = model
+        self.system = _system_prompt()
+
+    def classify(self, batch: list[dict]) -> dict[str, dict]:
+        openai = self.openai
+        try:
+            response = self.client.responses.create(
+                model=self.model,
+                instructions=self.system,
+                input=_user_message(batch),
+                text={"format": {"type": "json_schema", "name": "classification",
+                                 "schema": RESULT_SCHEMA, "strict": True}},
+            )
+        except (openai.AuthenticationError, openai.PermissionDeniedError) as e:
+            raise ProviderUnavailable(f"OpenAI auth failed: {e}") from e
+        except openai.NotFoundError as e:
+            raise ProviderUnavailable(
+                f"OpenAI model '{self.model}' not found — set analyzer.openai_model to one your "
+                f"account can use") from e
+        except openai.RateLimitError:
+            log.warning("OpenAI rate limited or out of credit; using lexicon for this batch")
+            return {}
+        except openai.APIStatusError as e:
+            log.warning("OpenAI error %s; using lexicon for this batch", e.status_code)
+            return {}
+        except openai.APIConnectionError:
+            log.warning("Cannot reach OpenAI; using lexicon for this batch")
+            return {}
+        return _normalize(json.loads(response.output_text)["results"], batch, self.model)
+
+
 def resolve_provider(cfg: dict) -> str:
     provider = (cfg.get("analyzer") or {}).get("provider", "auto")
     if provider == "auto":
@@ -473,6 +514,8 @@ def resolve_provider(cfg: dict) -> str:
             return "gemini"
         if os.getenv("ANTHROPIC_API_KEY") or os.getenv("ANTHROPIC_AUTH_TOKEN"):
             return "claude"
+        if os.getenv("OPENAI_API_KEY"):
+            return "openai"
         return "lexicon"
     return provider
 
@@ -483,7 +526,38 @@ def _make_llm(provider: str, acfg: dict):
                               acfg.get("gemini_min_seconds_between_requests", 6))
     if provider == "claude":
         return ClaudeAnalyzer(acfg.get("claude_model", "claude-opus-5"), acfg.get("claude_effort", "low"))
+    if provider == "openai":
+        return OpenAIAnalyzer(acfg.get("openai_model", "gpt-5.4-mini"))
     return None
+
+
+BANGLA_TEXT = re.compile(r"[\u0980-\u09FF]")
+
+
+def refresh_english_summaries(conn, hours: float) -> dict:
+    """Items analysed before the switch to English carry a Bangla summary.
+
+    Re-summarising all of them would be thousands of LLM calls, so the recent window — the one
+    the dashboard actually shows — is queued for re-analysis, and the older summaries are blanked:
+    the headline still says what happened, and those rows leave on the retention window anyway."""
+    since = db.hours_ago(hours)
+    recent, old = [], []
+    for row in conn.execute("SELECT id, ts, summary FROM items WHERE sentiment IS NOT NULL"):
+        summary = row["summary"]
+        if summary is None:
+            # analysed by the lexicon, which writes no summary — worth an LLM pass inside the window
+            if row["ts"] >= since:
+                recent.append((row["id"],))
+        elif BANGLA_TEXT.search(summary):
+            (recent if row["ts"] >= since else old).append((row["id"],))
+    if old:
+        conn.executemany("UPDATE items SET summary = NULL WHERE id = ?", old)
+    if recent:
+        conn.executemany(
+            """UPDATE items SET sentiment=NULL, score=NULL, category=NULL, severity=NULL,
+                                summary=NULL, analyzer=NULL, country=NULL WHERE id = ?""", recent)
+    conn.commit()
+    return {"queued": len(recent), "blanked": len(old)}
 
 
 def backfill_country(conn) -> int:

@@ -66,6 +66,7 @@ def load() -> tuple[pd.DataFrame, pd.DataFrame, int]:
     collected = conn.execute("SELECT COUNT(*) FROM items").fetchone()[0]
     items = pd.read_sql_query("SELECT * FROM items WHERE sentiment IS NOT NULL", conn)
     tickets = pd.read_sql_query("SELECT * FROM tickets ORDER BY created_at DESC", conn)
+    briefs = {int(r["window_hours"]): dict(r) for r in conn.execute("SELECT * FROM digests")}
     conn.close()
     # Charts get naive local time so the axis reads in Dhaka time regardless of the browser
     # A database written by an older version of the monitor has no credibility columns yet
@@ -76,10 +77,10 @@ def load() -> tuple[pd.DataFrame, pd.DataFrame, int]:
     items["ts"] = pd.to_datetime(items["ts"], utc=True, format="ISO8601").dt.tz_convert(TZ).dt.tz_localize(None)
     items["category_label"] = items["category"].map(CATEGORIES)
     tickets["created"] = pd.to_datetime(tickets["created_at"], utc=True, format="ISO8601").dt.tz_convert(TZ).dt.tz_localize(None)
-    return items, tickets, collected
+    return items, tickets, collected, briefs
 
 
-items, tickets, collected = load()
+items, tickets, collected, briefs = load()
 st.title("📡 OSINT Negative News Monitor")
 
 if items.empty:
@@ -121,10 +122,20 @@ if not country_options:
 if f4.button("↻ Refresh", width="stretch"):
     st.cache_data.clear()
     st.rerun()
-search = st.text_input("Search", placeholder="keywords in the headline, text or summary — e.g. election, ডেঙ্গু")
+search = st.text_input("Search", placeholder="keywords in the headline, text or summary — e.g. election, flood")
 
 hours = RANGES[range_name]
 now = pd.Timestamp.now(tz=TZ).tz_localize(None)
+
+# ─── The brief, for whichever range is selected ───────────────────────────────
+with st.container(border=True):
+    st.markdown(f"#### 📰 At a glance — {range_name.lower()}")
+    brief = briefs.get(hours)
+    if brief:
+        st.markdown(brief["text"])
+        st.caption(f"Written {to_local(brief['created_at'], cfg)}")
+    else:
+        st.caption("No brief for this range yet — one is written on the next monitor run.")
 df = items[(items["ts"] >= now - pd.Timedelta(hours=hours)) & items["source_type"].isin(types)]
 if countries:
     df = df[df["country"].isin(countries)]
@@ -184,7 +195,7 @@ time_fmt = "%d %b %H:%M" if freq == "h" else "%d %b"
 # ─── Negative news by type + negative share over time ─────────────────────────
 c1, c2 = st.columns(2)
 with c1:
-    st.subheader("কী ধরনের নেগেটিভ নিউজ — by type")
+    st.subheader("Negative news by type")
     if neg.empty:
         st.caption("No negative items in this range.")
     else:
@@ -304,7 +315,7 @@ view = view.assign(
 st.dataframe(
     view.sort_values(["severity", "ts"], ascending=[False, False])[
         ["ts", "severity", "category_label", "country", "headline", "summary", "credibility", "cred_reason",
-         "factcheck", "factcheck_url", "source", "source_type", "url", "analyzer"]],
+         "factcheck", "factcheck_url", "source", "source_type", "url"]],
     hide_index=True, width="stretch",
     column_config={
         "ts": st.column_config.DatetimeColumn("Time", format="D MMM, h:mm a"),
@@ -318,7 +329,6 @@ st.dataframe(
         "factcheck_url": st.column_config.LinkColumn("Fact-check link", display_text="open"),
         "source": "Source", "source_type": "Kind",
         "url": st.column_config.LinkColumn("Link", display_text="open"),
-        "analyzer": "Analyzer",
     },
 )
 

@@ -71,12 +71,14 @@ youtube:
   every_minutes: 60
 
 analyzer:
-  provider: auto              # auto = Gemini if GEMINI_API_KEY is set, else Claude if ANTHROPIC_API_KEY,
-                              # else lexicon. gemini | claude | lexicon to force one.
+  provider: auto              # auto picks the first key it finds: GEMINI_API_KEY, then ANTHROPIC_API_KEY,
+                              # then OPENAI_API_KEY; none of them means the offline lexicon.
+                              # gemini | claude | openai | lexicon to force one.
   gemini_model: gemini-3.5-flash-lite      # free tier; try gemini-3.5-flash for better accuracy
   gemini_min_seconds_between_requests: 6   # free tier allows only a few requests per minute
   claude_model: claude-opus-5
   claude_effort: low          # low is enough for classification; raise if accuracy is poor
+  openai_model: gpt-5.4-mini  # OpenAI has no free tier; every call is billed
   batch_size: 25
   max_items_per_run: 500
 
@@ -151,6 +153,17 @@ credibility:
     - Risingbd
     - TBS News
     - UNB
+
+# ─── Brief: what happened, in a few lines ─────────────────────────────────────
+# The counts are computed in code; the LLM only turns the headlines into sentences.
+# Without an LLM key a plain version is written instead.
+digest:
+  enabled: true
+  windows: [6, 24, 72, 168, 720]   # one per time range in the dashboard: 6h, 24h, 3d, 7d, 30d
+  every_hours: 6              # how often a brief is rewritten (each one costs one LLM call)
+  max_stories: 45             # headlines sent per brief; near-duplicates are merged first
+  email: true                 # send the 24h brief once a day
+  email_hour: 9               # local hour (see `timezone` above) to send it
 
 # ─── Ticket / email alert ─────────────────────────────────────────────────────
 # A ticket is created (and emailed) when, within the last `window_hours`:

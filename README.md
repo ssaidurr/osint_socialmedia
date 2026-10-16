@@ -50,11 +50,20 @@ Egulor kono-tateo scraping kora hoyni — ToS bhange, account ban hote pare, ar 
 
 Protiti negative item-e **severity 1–5** thake. Category list-ta [osint/analyzer.py](osint/analyzer.py)-er `CATEGORIES`-e.
 
-## Analyzer: tinta option
+## Analyzer: charta option
 
-- **lexicon** (kono key na thakle, free, offline): English-er jonno VADER, ar বাংলা/Banglish-er jonno keyword list. Headline-e bhalo kaaj kore, kintu sarcasm ba context bojhe na.
-- **gemini** (recommended, free tier): `.env`-e `GEMINI_API_KEY` dile nije theke chalu hoy. Bangla, Banglish ar context bhalo bojhe, ar protiti item-er ek line-er বাংলা summary dey.
-- **claude** (paid): `ANTHROPIC_API_KEY` dile chalu hoy. Output gemini-r motoi.
+Protiti item-er sentiment, category, country ar ek line-er বাংলা summary — ar "Ek nojore" brief-o ei provider diye-i lekha hoy.
+
+| Provider | Khoroch | Kokhon chalu hoy |
+|---|---|---|
+| **lexicon** | Free, offline | Kono LLM key na thakle |
+| **gemini** (recommended) | Free tier-e chole | `GEMINI_API_KEY` |
+| **claude** | Paid | `ANTHROPIC_API_KEY` |
+| **openai** | Paid, **kono free tier nei** | `OPENAI_API_KEY` |
+
+`provider: auto` thakle ei krame key khuje ney: Gemini → Claude → OpenAI → lexicon. Jekono ekta jor kore chalate [config.yaml](config.yaml)-e `analyzer.provider` set koro (`gemini` / `claude` / `openai` / `lexicon`)।
+
+**OpenAI babohar korle:** `.env`-e `OPENAI_API_KEY` dao, ar `analyzer.openai_model`-e tomar account-e ache emon model-er nam dao (default `gpt-5.4-mini`)। Model-er nam vul hole run-e sposhto message ashbe, ar oi run-e lexicon-e fallback korbe. Ekhonkar data-te mashe mota-muti 3M input + 2.5M output token lagbe — khoroch jante tomar plan-er per-token dam dekho.
 
 LLM fail korle (key vul, rate limit, quota shesh, network) oi item-gulo lexicon diye analyze hoy, tai pipeline kokhono atke jay na.
 
@@ -75,6 +84,35 @@ Protiti negative item-er ekta **Credibility score (5–95)** ar tar karon dashbo
 Score kokhonoi 0 ba 100 hoy na. Beshi score mane "emon source-e ache jara shadharonoto thik khobor dey, ar onnorao eta dicche". Kom score mane "shondeho koro", **"eita fake" na**. Ar fact-check na pawa mane khobor-ta shotti na — shudhu mane keu eta niye ekhono fact-check kore ni.
 
 Dashboard-er Negative items table-e **"Only doubtful (credibility < 40)"** tick korle shudhu shondehojonok item-gulo dekhabe. Ticket email-eo low-credibility ar fact-check verdict dekhano hoy.
+
+## Ek nojore brief (ki hocche)
+
+Dashboard-er upore ekta card, ar protidin shokale ekta email — shesh **24 ghonta** ar shesh **7 diner** khobor 5–8 line-e. Target holo: ek nojore dekhei bojha jay ki hocche.
+
+```
+📰 Ek nojore — what happened          ( Last 24 hours | Last 7 days )
+- যুক্তরাষ্ট্রের ওরেগনে স্কুলে গুলিবর্ষণে শিশুসহ চারজন নিহত, ১২টি সূত্র কভার করেছে।
+- পেশোয়ারে স্কুল ছাদ ধসে বহু শিশু হতাহত, ৮টি সূত্র জানিয়েছে।
+- মোট 1,846 item · 59% negative · দেশ: US, UA, GB · বিষয়: রাজনৈতিক সংঘর্ষ, নিরাপত্তা
+Written 16 Oct 2026, 11:48 AM · gemini-3.5-flash-lite
+```
+
+Kivabe kaaj kore:
+
+- Ekই khobor onek outlet dile ekbar-i ashe, ar sathe "koyta source diyeche" sheta thake — eta-i bole khobor-ta koto boro.
+- Generic title (jemon "আন্তর্জাতিক বাংলা খবর 16 Oct") bad diye dey, karon oita kono ekta ghotona na.
+- **Number-gulo code-e hisheb hoy, LLM likhe na.** Ekbar test-e Gemini 57%-ke "৫.৭%" likhe diyechilo — report-e vul number na-thakar cheye kharap kichu nei. Tai LLM shudhu khobor-er bullet likhe, shesh-er totals line code-e toiri hoy.
+- LLM key na thakle ba call fail korle **plain version** likhe dey (top story + totals), tai card ar email kokhono khali thake na.
+
+Command:
+```bash
+.venv/bin/python main.py digest                  # je brief-gulo purono hoye geche, shegulo notun kore lekhe
+.venv/bin/python main.py digest --hours 168      # shudhu 7 diner
+.venv/bin/python main.py digest --force          # ekhon-i notun kore lekhao
+.venv/bin/python main.py digest --email          # rojer email ekhon-i pathanor cheshta
+```
+
+Setting [config.yaml](config.yaml) → `digest`: kon window (`windows`), koto ghonta por por notun kore lekha hobe (`every_hours`, protiti brief-e ekta LLM call), email on/off ar kon ghontay pathabe (`email_hour`, tomar `timezone` onujayi).
 
 ## Country filter ar keyword search
 

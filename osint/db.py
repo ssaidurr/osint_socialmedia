@@ -57,6 +57,14 @@ CREATE TABLE IF NOT EXISTS state (   -- small key/value store, e.g. last YouTube
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS digests (  -- the latest brief per window (24h, 7d, ...)
+    window_hours REAL PRIMARY KEY,
+    created_at   TEXT NOT NULL,
+    text         TEXT NOT NULL,
+    model        TEXT,              -- NULL when written without an LLM
+    facts        TEXT NOT NULL      -- JSON: the counts the brief was written from
+);
 """
 
 
@@ -130,6 +138,30 @@ def set_state(conn: sqlite3.Connection, key: str, value: str) -> None:
         (key, value),
     )
     conn.commit()
+
+
+def save_digest(conn: sqlite3.Connection, hours: float, text: str, model: str | None, facts: dict) -> None:
+    conn.execute(
+        """INSERT INTO digests (window_hours, created_at, text, model, facts) VALUES (?, ?, ?, ?, ?)
+           ON CONFLICT(window_hours) DO UPDATE SET
+             created_at = excluded.created_at, text = excluded.text,
+             model = excluded.model, facts = excluded.facts""",
+        (float(hours), now_utc(), text, model, json.dumps(facts, ensure_ascii=False)),
+    )
+    conn.commit()
+
+
+def get_digest(conn: sqlite3.Connection, hours: float) -> dict | None:
+    row = conn.execute("SELECT * FROM digests WHERE window_hours = ?", (float(hours),)).fetchone()
+    if not row:
+        return None
+    digest = dict(row)
+    digest["facts"] = json.loads(digest["facts"])
+    return digest
+
+
+def seconds_since(iso_time: str) -> float:
+    return (datetime.now(timezone.utc) - datetime.fromisoformat(iso_time)).total_seconds()
 
 
 def prune(conn: sqlite3.Connection, days: float) -> int:

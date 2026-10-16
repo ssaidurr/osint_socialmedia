@@ -216,7 +216,7 @@ def render_email(cfg: dict, ticket: dict, stats: dict, items: list[dict]) -> tup
 <p style="font-size:15px">Negative content crossed the alert threshold:
 <b style="font-size:22px">{ratio:.0%}</b> negative ({stats['negative']} of {stats['total']} items),
 average severity <b>{stats['avg_severity']:.1f}/5</b>.{baseline_note}</p>
-<h3 style="margin:20px 0 6px">কী ধরনের নেগেটিভ নিউজ (by type)</h3>
+<h3 style="margin:20px 0 6px">Negative news by type</h3>
 <table style="border-collapse:collapse;font-size:14px">{cat_rows}</table>
 <h3 style="margin:20px 0 6px">Top negative items</h3>
 <table style="border-collapse:collapse;font-size:14px;width:100%">{item_rows}</table>
