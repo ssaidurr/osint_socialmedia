@@ -47,10 +47,35 @@ def _admit(user: dict, sheet) -> dict:
     return user
 
 
-def _expired(user: dict, contact: str) -> None:
-    st.warning(f"The demo for **{user['email']}** ended on {user.get('expires', '—')}.")
-    reach_us = f"write to [{contact}](mailto:{contact})" if contact else "get in touch with us"
-    st.markdown(f"To keep access, {reach_us} and we will extend it.")
+def _expired(user: dict, conf: dict, sheet) -> None:
+    """The trial is over. Say so, and give them a way to ask for more without leaving the page."""
+    contact = conf.get("contact_email", "")
+    st.warning(f"The {conf.get('trial_days', 14)}-day demo for **{user['email']}** ended on "
+               f"{user.get('expires', '—')}.")
+
+    if st.session_state.get("request_sent"):
+        st.success("Thank you — we have your request and will get back to you by email.")
+        st.stop()
+
+    st.markdown("#### Want to keep using it?")
+    st.caption("Leave a line below and we will contact you."
+               + (f" Or write to {contact}." if contact else ""))
+    with st.form("gate_request"):
+        message = st.text_area("What would you like to use it for?",
+                               placeholder="e.g. we want to monitor our brand and two competitors")
+        asked = st.form_submit_button("Send the request", type="primary")
+    if asked:
+        if not message.strip():
+            st.error("Please write a line first.")
+            st.stop()
+        try:
+            registry.log_request(sheet, user, message)
+        except Exception:
+            log.exception("Could not record the access request")
+            st.error("Could not send that just now. Please try again, or email us directly.")
+            st.stop()
+        st.session_state["request_sent"] = True
+        st.rerun()
     st.stop()
 
 
@@ -82,7 +107,8 @@ def _form(sheet, conf: dict) -> dict:
             _admit(user, sheet)               # already registered: the other fields are not needed
             st.rerun()
         if user:
-            _expired(user, contact)
+            st.session_state["expired_user"] = user   # next run shows only the request screen
+            st.rerun()
 
         if not (name.strip() and phone.strip() and country.strip()):
             st.error("First time here — please fill in your name, phone and country too.")
@@ -128,6 +154,10 @@ def require_access(cfg: dict) -> dict | None:
         st.caption(f"Reason: {detail}")
         st.stop()
 
+    expired = st.session_state.get("expired_user")
+    if expired:
+        _expired(expired, conf, sheet)
+
     user = st.session_state.get("demo_user")
     if user and registry.is_active(user):
         return user
@@ -138,7 +168,7 @@ def require_access(cfg: dict) -> dict | None:
         if user and registry.is_active(user):
             return _admit(user, sheet)
         if user:
-            _expired(user, conf.get("contact_email", ""))
+            _expired(user, conf, sheet)
         st.query_params.pop("k", None)
 
     return _form(sheet, conf)

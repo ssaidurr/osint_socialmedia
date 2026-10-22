@@ -109,6 +109,26 @@ def touch(sheet, user: dict) -> None:
         log.warning("Could not record the visit for %s: %s", user.get("email"), e)
 
 
+REQUEST_COLUMNS = ["asked_at", "email", "name", "phone", "country", "message"]
+
+
+def log_request(sheet, user: dict, message: str) -> None:
+    """Someone whose trial ran out, asking for more. Kept on its own tab so the users sheet
+    stays one row per person and a second ask never overwrites the first."""
+    book = sheet.spreadsheet
+    try:
+        requests_sheet = book.worksheet("requests")
+    except gspread.WorksheetNotFound:
+        requests_sheet = book.add_worksheet(title="requests", rows=1000, cols=len(REQUEST_COLUMNS))
+    if requests_sheet.row_values(1) != REQUEST_COLUMNS:
+        requests_sheet.update(range_name="A1", values=[REQUEST_COLUMNS])
+    requests_sheet.append_row(
+        [datetime.now(timezone.utc).isoformat(timespec="seconds"), user.get("email", ""),
+         user.get("name", ""), str(user.get("phone", "")), user.get("country", ""), message.strip()],
+        value_input_option="USER_ENTERED",
+    )
+
+
 def days_left(user: dict, today: date | None = None) -> int:
     """Whole days of trial remaining; 0 or less means it has run out."""
     today = today or datetime.now(timezone.utc).date()
