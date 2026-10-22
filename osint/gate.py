@@ -110,7 +110,12 @@ def require_access(cfg: dict) -> dict | None:
     except Exception as e:
         log.exception("Cannot reach the registration sheet")
         st.error("Sign-up is unavailable right now. Please try again in a few minutes.")
-        st.caption(f"({type(e).__name__})")
+        # gspread hides the real cause behind a bare PermissionError, and without the detail
+        # there is nothing to go on: "not shared with the service account", "API not enabled"
+        # and "wrong sheet id" all look identical from here.
+        cause = e.__cause__ or e
+        detail = " ".join(str(cause).split())[:300] or type(cause).__name__
+        st.caption(f"Reason: {detail}")
         st.stop()
 
     user = st.session_state.get("demo_user")
