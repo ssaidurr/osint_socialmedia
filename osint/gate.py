@@ -58,41 +58,34 @@ def _form(sheet, conf: dict) -> dict:
     trial_days = conf.get("trial_days", 14)
     contact = conf.get("contact_email", "")
 
-    st.markdown(f"#### Get access to the demo")
-    st.caption(f"{trial_days} days, free. We ask who you are so we can follow up — nothing else.")
+    st.markdown("#### Get access to the demo")
+    st.caption(f"{trial_days} days, free. We ask who you are so we can follow up — nothing else. "
+               f"Already registered? Your email alone is enough.")
 
-    known = st.session_state.get("gate_known")
-
-    if not known:                              # step one: who is this?
-        email = st.text_input("Work email", key="gate_email", placeholder="you@company.com")
-        if st.button("Continue", type="primary", key="gate_continue") and email:
-            if not registry.valid_email(email):
-                st.error("That does not look like an email address.")
-                st.stop()
-            if _is_admin(email, conf):
-                _admit(_admin_user(email), sheet)
-                st.rerun()
-            user = registry.find(sheet, email)
-            if user and registry.is_active(user):
-                _admit(user, sheet)
-                st.rerun()
-            if user:
-                _expired(user, contact)
-            st.session_state["gate_known"] = registry.clean_email(email)
-            st.rerun()
-        st.stop()
-
-    # step two: a new address, so ask who they are. Step one is gone from the screen, or
-    # people click the wrong button and go round in circles.
-    st.success(f"New here — just a few details for **{known}**.")
-    with st.form("gate_details"):
+    with st.form("gate_form"):
+        email = st.text_input("Work email", placeholder="you@company.com")
         name = st.text_input("Your name")
         phone = st.text_input("Phone")
         country = st.text_input("Country")
         submitted = st.form_submit_button(f"Start my {trial_days} days", type="primary")
+
     if submitted:
+        if not registry.valid_email(email):
+            st.error("That does not look like an email address.")
+            st.stop()
+        if _is_admin(email, conf):
+            _admit(_admin_user(email), sheet)
+            st.rerun()
+
+        user = registry.find(sheet, email)
+        if user and registry.is_active(user):
+            _admit(user, sheet)               # already registered: the other fields are not needed
+            st.rerun()
+        if user:
+            _expired(user, contact)
+
         if not (name.strip() and phone.strip() and country.strip()):
-            st.error("Name, phone and country, please.")
+            st.error("First time here — please fill in your name, phone and country too.")
             st.stop()
         # One trial per phone as well as per address, or a second address buys another 14 days
         already = registry.find_by_phone(sheet, phone)
@@ -100,12 +93,8 @@ def _form(sheet, conf: dict) -> dict:
             st.error(f"This phone number is already registered under {already['email']}. "
                      f"Sign in with that address, or get in touch with us.")
             st.stop()
-        user = registry.register(sheet, known, name, phone, country, trial_days)
-        st.session_state.pop("gate_known", None)
+        user = registry.register(sheet, email, name, phone, country, trial_days)
         _admit(user, sheet)
-        st.rerun()
-    if st.button("Use a different email", key="gate_back"):
-        st.session_state.pop("gate_known", None)
         st.rerun()
     st.stop()
 
