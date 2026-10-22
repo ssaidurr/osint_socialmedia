@@ -164,7 +164,7 @@ demo_access:
   require: true
   trial_days: 14
   worksheet: users
-  contact_email: ""           # shown when a trial ends — put the address people should write to
+  contact_email: "digitalmarketing.bizinc@gmail.com"   # shown when a trial ends — put the address people should write to
   admin_emails:               # these addresses walk straight in: no form, no trial, no sheet row
     - mssaidurr@gmail.com
     - nafiz.e.chy@gmail.com
