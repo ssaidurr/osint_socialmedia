@@ -28,6 +28,11 @@ google_news:
     - { query: "Gaza" }
     - { query: "Saudi Arabia OR UAE OR Qatar" }
     - { query: "Iran" }
+    - { query: "Dhaka" }
+    - { query: "Bangladesh politics OR Bangladesh economy", country: BD }
+    - { query: "Lebanon OR Yemen OR Syria" }
+    - { query: "Egypt OR Turkey" }
+    - { query: "Palestine" }
     # - { query: "your brand or topic" }
 
 rss_feeds:
@@ -79,7 +84,9 @@ telegram:
 # Public Mastodon hashtag timelines (open, no key)
 mastodon:
   instances: [mastodon.social]
-  tags: [news, worldnews, politics]
+  tags: [worldnews, bangladesh, gaza, palestine, middleeast, iran, lebanon]
+  # #news and #politics were dropped: between them they were a quarter of everything collected,
+  # almost all US chatter, and they drowned the regional feeds.
   limit: 40
 
 # YouTube videos + comments. Needs YOUTUBE_API_KEY in .env (free, Google Cloud Console).
