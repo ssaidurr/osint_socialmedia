@@ -15,7 +15,7 @@ import gspread
 
 log = logging.getLogger(__name__)
 
-COLUMNS = ["email", "name", "company", "phone", "first_seen", "expires",
+COLUMNS = ["email", "name", "phone", "country", "first_seen", "expires",
            "last_seen", "visits", "token", "note"]
 # Deliberately loose: the point is to catch typos, not to police exotic but valid addresses.
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[A-Za-z]{2,}$")
@@ -68,11 +68,25 @@ def find_by_token(sheet, token: str) -> dict | None:
     return next((u for u in everyone(sheet) if str(u.get("token", "")) == token), None)
 
 
-def register(sheet, email: str, name: str, company: str, phone: str,
+def clean_phone(value: str) -> str:
+    """Digits only, last ten of them: +880 1711-223344, 01711223344 and 1711223344 are one person."""
+    digits = re.sub(r"\D", "", value or "")
+    return digits[-10:] if len(digits) >= 10 else digits
+
+
+def find_by_phone(sheet, phone: str) -> dict | None:
+    """The row already holding this number — one trial per phone, whatever the address."""
+    wanted = clean_phone(phone)
+    if not wanted:
+        return None
+    return next((u for u in everyone(sheet) if clean_phone(str(u.get("phone", ""))) == wanted), None)
+
+
+def register(sheet, email: str, name: str, phone: str, country: str,
              trial_days: int = 14, note: str = "") -> dict:
     today = datetime.now(timezone.utc).date()
     user = {
-        "email": clean_email(email), "name": name.strip(), "company": company.strip(),
+        "email": clean_email(email), "name": name.strip(), "country": country.strip(),
         "phone": phone.strip(), "first_seen": today.isoformat(),
         "expires": (today + timedelta(days=trial_days)).isoformat(),
         "last_seen": today.isoformat(), "visits": 1,

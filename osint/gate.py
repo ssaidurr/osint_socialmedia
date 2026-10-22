@@ -27,11 +27,23 @@ def _sheet(sheet_id: str, worksheet: str):
     return registry.open_sheet(dict(st.secrets["gcp_service_account"]), sheet_id, worksheet)
 
 
+def _admin_user(email: str) -> dict:
+    """Us, not a lead: no sheet row, no trial, nothing to fill in."""
+    return {"email": registry.clean_email(email), "name": "Admin", "admin": True,
+            "expires": "2099-12-31", "token": "", "visits": 0}
+
+
+def _is_admin(email: str, conf: dict) -> bool:
+    admins = [registry.clean_email(a) for a in (conf.get("admin_emails") or [])]
+    return registry.clean_email(email) in admins
+
+
 def _admit(user: dict, sheet) -> dict:
     st.session_state["demo_user"] = user
     if user.get("token"):
         st.query_params["k"] = str(user["token"])   # survives a refresh
-    registry.touch(sheet, user)
+    if not user.get("admin"):
+        registry.touch(sheet, user)
     return user
 
 
@@ -57,6 +69,9 @@ def _form(sheet, conf: dict) -> dict:
             if not registry.valid_email(email):
                 st.error("That does not look like an email address.")
                 st.stop()
+            if _is_admin(email, conf):
+                _admit(_admin_user(email), sheet)
+                st.rerun()
             user = registry.find(sheet, email)
             if user and registry.is_active(user):
                 _admit(user, sheet)
@@ -72,14 +87,20 @@ def _form(sheet, conf: dict) -> dict:
     st.success(f"New here — just a few details for **{known}**.")
     with st.form("gate_details"):
         name = st.text_input("Your name")
-        company = st.text_input("Company")
-        phone = st.text_input("Phone (optional)")
+        phone = st.text_input("Phone")
+        country = st.text_input("Country")
         submitted = st.form_submit_button(f"Start my {trial_days} days", type="primary")
     if submitted:
-        if not name.strip() or not company.strip():
-            st.error("Name and company, please.")
+        if not (name.strip() and phone.strip() and country.strip()):
+            st.error("Name, phone and country, please.")
             st.stop()
-        user = registry.register(sheet, known, name, company, phone, trial_days)
+        # One trial per phone as well as per address, or a second address buys another 14 days
+        already = registry.find_by_phone(sheet, phone)
+        if already:
+            st.error(f"This phone number is already registered under {already['email']}. "
+                     f"Sign in with that address, or get in touch with us.")
+            st.stop()
+        user = registry.register(sheet, known, name, phone, country, trial_days)
         st.session_state.pop("gate_known", None)
         _admit(user, sheet)
         st.rerun()
@@ -137,6 +158,9 @@ def require_access(cfg: dict) -> dict | None:
 def sidebar_note(user: dict | None) -> None:
     """Who is signed in, and how long they have left."""
     if not user:
+        return
+    if user.get("admin"):
+        st.caption(f"Signed in as {user['email']} · admin")
         return
     left = registry.days_left(user)
     st.caption(f"Signed in as {user['email']} · {left} day{'s' if left != 1 else ''} of demo access left")

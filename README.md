@@ -69,9 +69,11 @@ LLM fail korle (key vul, rate limit, quota shesh, network) oi item-gulo lexicon 
 
 ## Demo access: ke dekhche, ar koto din
 
-Dashboard-e dhukar age protiti manush ekta chhoto form bhore — **nam, work email, company, phone**. Tarpor **14 din** free access pay. Protiti registration ekta **Google Sheet**-e row hishebe jay, tai team Sheet kholei lead-er list dekhte, filter korte ar export korte pare.
+Dashboard-e dhukar age protiti manush ekta chhoto form bhore — **email, nam, phone, country**. Tarpor **14 din** free access pay. Protiti registration ekta **Google Sheet**-e row hishebe jay, tai team Sheet kholei lead-er list dekhte, filter korte ar export korte pare.
 
-- Purono user email dilei dhuke jay (abar form bhorte hoy na)।
+- Purono user **shudhu email** dilei dhuke jay — nam/phone/country abar chay na।
+- **Ek phone number-e ekta-i trial** — onno email diye abar cheshta korle bole dey kon address-e oi number agei registered. (Email bodle bar bar 14 din neowa bondho।)
+- **Admin-ra form-i dekhe na** — [config.yaml](config.yaml)-er `demo_access.admin_emails`-e je email thakbe, sheta diye shorasori dhuke jabe, Sheet-e kono row-o hobe na।
 - **14 din par hoye gele** sposhto message dekhay: "The demo for X ended on <date>" ar contact korte bole. Data dekhay na.
 - Refresh korle login thake — access token URL-e (`?k=...`) thake, tai barbar email dite hoy na।
 - Sheet-e `last_seen` ar `visits`-o update hoy, tai bojha jay ke asholey use korche.

@@ -165,6 +165,8 @@ demo_access:
   trial_days: 14
   worksheet: users
   contact_email: ""           # shown when a trial ends — put the address people should write to
+  admin_emails:               # these addresses walk straight in: no form, no trial, no sheet row
+    - mssaidurr@gmail.com
 
 # ─── Brief: what happened, in a few lines ─────────────────────────────────────
 # The counts are computed in code; the LLM only turns the headlines into sentences.
