@@ -123,7 +123,7 @@ def reddit(subreddit: str, source_type: str) -> list[dict]:
                 "ts": _entry_ts(e),
                 "collected_at": collected,
             })
-    time.sleep(6)  # Reddit rate-limits unauthenticated feeds hard; space the requests out
+    time.sleep(8)  # Reddit rate-limits unauthenticated feeds hard; space the requests out
     return out
 
 
@@ -201,12 +201,24 @@ def collect_all(cfg: dict, conn=None) -> tuple[list[dict], dict[str, int | str]]
     rd = cfg.get("reddit") or {}
     # Posts and comments are separate jobs so a rate-limited comments feed doesn't discard the posts
     reddit_kinds = ["reddit_post"] + (["reddit_comment"] if rd.get("include_comments", True) else [])
+    reddit_jobs = []
     for sub in rd.get("subreddits", []):
         for kind in reddit_kinds:
             label = "posts" if kind == "reddit_post" else "comments"
-            jobs.append((f"Reddit: r/{sub} {label}", lambda sub=sub, kind=kind: reddit(sub, kind)))
+            reddit_jobs.append((f"Reddit: r/{sub} {label}", lambda sub=sub, kind=kind: reddit(sub, kind)))
     for q in rd.get("searches", []):
-        jobs.append((f"Reddit search: {q}", lambda q=q: reddit_search(q, rd.get("search_limit", 25))))
+        reddit_jobs.append((f"Reddit search: {q}", lambda q=q: reddit_search(q, rd.get("search_limit", 25))))
+
+    # Reddit rate-limits unauthenticated readers hard: ask for everything every run and most of it
+    # comes back 429. A few feeds per run, taking the next few each time, covers them all within
+    # a handful of runs and keeps every request inside the limit.
+    per_run = rd.get("per_run", 3)
+    total = len(reddit_jobs)
+    if conn is not None and per_run and total > per_run:
+        start = int(get_state(conn, "reddit_cursor") or 0) % total
+        reddit_jobs = [reddit_jobs[(start + i) % total] for i in range(per_run)]
+        set_state(conn, "reddit_cursor", str((start + per_run) % total))
+    jobs += reddit_jobs
 
     tg = cfg.get("telegram") or {}
     for channel in tg.get("channels", []):
@@ -323,5 +335,5 @@ def reddit_search(query: str, limit: int = 25) -> list[dict]:
             "ts": _entry_ts(e),
             "collected_at": collected,
         })
-    time.sleep(6)  # Reddit rate-limits unauthenticated requests hard
+    time.sleep(8)  # Reddit rate-limits unauthenticated requests hard
     return out

@@ -17,10 +17,22 @@ google_news:
     - { topic: HEALTH }
     - { topic: WORLD, country: GB }     # UK edition — same section, different newsroom mix
     - { topic: WORLD, country: IN }     # India edition
+    # A country's own news. NATION only returns anything for some editions — these were checked;
+    # BD/en, UAE, Saudi, Egypt, Turkey and Qatar come back empty, so they are covered by search below.
+    - { topic: NATION, lang: bn, country: BD }
+    - { topic: NATION, country: IL }
+    - { topic: NATION, country: PK }
+    # Keyword searches reach what the topic feeds miss
+    - { query: "Bangladesh", country: BD }
+    - { query: "বাংলাদেশ", lang: bn, country: BD }
+    - { query: "Middle East" }
+    - { query: "Gaza" }
+    - { query: "Saudi Arabia OR UAE OR Qatar" }
+    - { query: "Iran" }
     # - { query: "your brand or topic" }
-    # - { query: "বাংলাদেশ", lang: bn, country: BD }
 
 rss_feeds:
+  # Global
   - { name: "BBC World", url: "https://feeds.bbci.co.uk/news/world/rss.xml" }
   - { name: "Al Jazeera", url: "https://www.aljazeera.com/xml/rss/all.xml" }
   - { name: "The Guardian", url: "https://www.theguardian.com/world/rss" }
@@ -32,16 +44,28 @@ rss_feeds:
   - { name: "Sky News", url: "https://feeds.skynews.com/feeds/rss/world.xml" }
   - { name: "Times of India", url: "https://timesofindia.indiatimes.com/rssfeeds/296589292.cms" }
   - { name: "ABC (Australia)", url: "https://www.abc.net.au/news/feed/51120/rss.xml" }
-  # Bangladesh feeds — uncomment to put them back in the mix:
-  # - { name: "Prothom Alo", url: "https://www.prothomalo.com/feed/" }
-  # - { name: "The Daily Star", url: "https://www.thedailystar.net/frontpage/rss.xml" }
-  # - { name: "Risingbd", url: "https://www.risingbd.com/rss/rss.xml" }
-  # - { name: "TBS News", url: "https://www.tbsnews.net/rss.xml" }
+  # Middle East — deliberately from several sides, since each covers what the others leave out
+  - { name: "Middle East Eye", url: "https://www.middleeasteye.net/rss" }
+  - { name: "Al Monitor", url: "https://www.al-monitor.com/rss" }
+  - { name: "Anadolu (Middle East)", url: "https://www.aa.com.tr/en/rss/default?cat=middle-east" }
+  - { name: "Times of Israel", url: "https://www.timesofisrael.com/feed/" }
+  - { name: "Jerusalem Post", url: "https://www.jpost.com/rss/rssfeedsfrontpage.aspx" }
+  - { name: "Daily Sabah", url: "https://www.dailysabah.com/rssFeed/10" }
+  - { name: "Tehran Times", url: "https://www.tehrantimes.com/rss" }
+  - { name: "Egypt Independent", url: "https://egyptindependent.com/feed/" }
+  # Bangladesh
+  - { name: "Prothom Alo", url: "https://www.prothomalo.com/feed/" }
+  - { name: "The Daily Star", url: "https://www.thedailystar.net/frontpage/rss.xml" }
+  - { name: "TBS News", url: "https://www.tbsnews.net/rss.xml" }
+  # Arab News, Al Arabiya, Gulf News, Khaleej Times, The National, Dhaka Tribune, bdnews24, BSS
+  # and Risingbd were all tried: they either block bots or no longer serve a working feed.
+  # Google News above still carries their stories.
 
 # Public Reddit posts + latest comments (no login needed)
 reddit:
-  subreddits: [worldnews, news]
+  subreddits: [worldnews, news, bangladesh, MiddleEast]
   include_comments: true
+  per_run: 3                    # feeds per run, taken in turn — Reddit 429s if you ask for them all
   searches: []                  # keyword search across all of Reddit, e.g. ["your brand"]
   search_limit: 25
 
@@ -49,7 +73,9 @@ reddit:
 # Most big outlets abandoned Telegram (CNN, AP, France 24 last posted in 2023).
 # rtnews and sputniknews are still active but state-run — add them only if you want that in the mix.
 telegram:
-  channels: [bloomberg]
+  channels: [bloomberg, thedailystar, almayadeen, trtworld]
+  # almayadeen and trtworld are state-aligned newsrooms. They are here because they report what
+  # the others do not, not because they are trusted — they are kept out of trusted_sources.
   limit: 40
 
 # Public Mastodon hashtag timelines (open, no key)
@@ -63,7 +89,7 @@ mastodon:
 # Free quota: search.list is capped at 100 calls/day and every run uses one call per query,
 # so YouTube only runs every `every_minutes` (2 queries x 24 runs = 48 calls/day).
 youtube:
-  queries: ["world news", "breaking news"]
+  queries: ["world news", "Bangladesh news", "Middle East news"]
   region: ""                    # "" = worldwide; "US", "GB", "BD" ... to bias one country
   max_results: 15
   comments_per_video: 20
@@ -132,6 +158,10 @@ credibility:
     - Kyodo
     - Anadolu
     - ReliefWeb
+    - Middle East Eye
+    - Al Monitor
+    - Times of Israel
+    - Jerusalem Post
     - t.me/bloomberg          # a newsroom's own Telegram channel counts as that newsroom
     # Bangladesh outlets
     - Prothom Alo
