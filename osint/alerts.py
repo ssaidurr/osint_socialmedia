@@ -207,7 +207,7 @@ def render_email(cfg: dict, ticket: dict, stats: dict, items: list[dict]) -> tup
         + f"<span style='color:#667085;font-size:12px'>{e(it['source'])} · {e(category_label(it['category']))}"
         f" · severity {it['severity']}/5 · {e(to_local(it['ts'], cfg))}</span></td></tr>"
         for it in items)
-    html_body = f"""<div style="font-family:-apple-system,Segoe UI,Roboto,'Noto Sans Bengali',sans-serif;max-width:680px;color:#101828">
+    html_body = f"""<div style="font-family:-apple-system,Segoe UI,Roboto,'Noto Sans Bengali',sans-serif;max-width:680px;color:#101828;background:#ffffff;padding:20px;border-radius:10px">
 <div style="border-left:6px solid {level_color};padding:12px 16px;background:#fff6f5">
   <div style="font-size:12px;color:#667085">OSINT Social Media Monitor · Ticket</div>
   <div style="font-size:20px;font-weight:700">{e(ticket['id'])} <span style="color:{level_color}">[{level}]</span></div>

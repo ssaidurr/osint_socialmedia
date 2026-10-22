@@ -10,18 +10,23 @@ import pandas as pd
 import requests
 import streamlit as st
 
-from osint import db
+from osint import db, gate
 from osint.analyzer import CATEGORIES
 from osint.config import TICKETS_DIR, load_config, to_local
 
-# Sentiment is polar: red and blue poles with a gray midpoint. Single-series bars use the red pole.
-NEG, NEU, POS = "#e34948", "#a8a7a0", "#2a78d6"
-MUTED = "#898781"
+# The SynergyAXN palette (see .streamlit/config.toml). Positive takes the brand accent rather
+# than the brand green: a red/green pair is the one combination colour-blind readers lose, and
+# cyan sits clearly apart from the negative red.
+NEG, NEU, POS = "#f87171", "#8a919c", "#5ee6ff"
+MUTED = "#8a919c"
+SURFACE = "#0b0d10"
+# A red ramp for "how much negative", bright enough to read on the near-black surface
+HEAT = ["#6a3537", "#823f41", "#99494a", "#b15354", "#c95d5e", "#e06767", "#f87171"]
 SENTIMENTS = ["negative", "neutral", "positive"]
 SENTIMENT_SCALE = alt.Scale(domain=SENTIMENTS, range=[NEG, NEU, POS])
 RANGES = {"Last 6 hours": 6, "Last 24 hours": 24, "Last 3 days": 72, "Last 7 days": 168, "Last 30 days": 720}
 
-st.set_page_config(page_title="OSINT Negative News Monitor", page_icon="📡", layout="wide")
+st.set_page_config(page_title="News Monitor", page_icon="📡", layout="wide")
 cfg = load_config()
 TZ = cfg.get("timezone", "Asia/Dhaka")
 alert_cfg = cfg["alert"]
@@ -80,8 +85,35 @@ def load() -> tuple[pd.DataFrame, pd.DataFrame, int]:
     return items, tickets, collected, briefs
 
 
+# The brand mark and wordmark are the ones the SynergyAXN site uses in its own header, so the
+# two read as one product. Geist carries no Bangla glyphs, hence the Bengali fallback below —
+# some headlines arrive in Bangla and must not land in a default serif.
+BRAND = """
+<style>
+  html, body, [class*="st-"], .stMarkdown, .stDataFrame {
+    font-family: "Geist", "Noto Sans Bengali", system-ui, -apple-system, sans-serif;
+  }
+  .brand { display: flex; align-items: center; gap: .5rem; margin: 0 0 .15rem; color: #eceef1; }
+  .brand-name { font-size: 1.02rem; font-weight: 500; letter-spacing: -.02em; }
+  .brand-dim { color: #8a919c; }
+</style>
+<div class="brand">
+  <svg width="22" height="22" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+    <circle cx="16" cy="16" r="14.5" stroke="currentColor" stroke-opacity="0.35"></circle>
+    <path d="M6 22 L16 6 L26 22" stroke="currentColor" stroke-width="2" stroke-linejoin="round"></path>
+    <path d="M10 26 L22 14" stroke="#5ee6ff" stroke-width="2" stroke-linecap="round"></path>
+    <circle cx="16" cy="16" r="2.2" fill="#5ee6ff"></circle>
+  </svg>
+  <span class="brand-name">Synergy<span class="brand-dim">AXN</span></span>
+</div>
+"""
+st.markdown(BRAND, unsafe_allow_html=True)
+st.title("News Monitor")
+
+# Nobody sees the data without leaving a way to be contacted
+demo_user = gate.require_access(cfg)
+
 items, tickets, collected, briefs = load()
-st.title("📡 OSINT Negative News Monitor")
 
 if items.empty:
     # Say exactly why there's nothing to show — the fix differs for each case
@@ -108,6 +140,7 @@ if items.empty:
     st.stop()
 st.caption(f"Last collection: {to_local(items['collected_at'].max(), cfg)}"
            + (f" · data from GitHub `{REMOTE_REPO}`" if REMOTE_REPO else ""))
+gate.sidebar_note(demo_user)
 
 # ─── Filters (one row, above the charts) ──────────────────────────────────────
 f1, f2, f3, f4 = st.columns([1, 2, 1.4, 0.6], vertical_alignment="bottom")
@@ -239,7 +272,7 @@ if not neg.empty:
         alt.Chart(heat).mark_rect(cornerRadius=2, stroke=None).encode(
             x=alt.X("bucket:T", title=None, axis=alt.Axis(format=time_fmt)),
             y=alt.Y("category_label:N", sort=order, title=None),
-            color=alt.Color("count:Q", title="Items", scale=alt.Scale(scheme="reds")),
+            color=alt.Color("count:Q", title="Items", scale=alt.Scale(range=HEAT)),
             tooltip=[alt.Tooltip("category_label:N", title="Type"),
                      alt.Tooltip("bucket:T", title="Time", format=time_fmt), alt.Tooltip("count:Q", title="Items")],
         ).properties(height=max(160, 30 * len(order))),
@@ -351,6 +384,7 @@ else:
         local = TICKETS_DIR / f"{pick}.html"
         report = local.read_text(encoding="utf-8") if local.exists() else None
     if report:
-        # st.html sanitizes; the report holds headlines and links scraped from the internet
-        with st.container(border=True):
-            st.html(report)
+        # st.html sanitizes; the report holds headlines and links scraped from the internet.
+        # The email is written for a white inbox, so it gets a white sheet here too — on the
+        # dark dashboard its own grey text would be unreadable.
+        st.html(f'<div style="background:#ffffff;padding:18px;border-radius:10px">{report}</div>')

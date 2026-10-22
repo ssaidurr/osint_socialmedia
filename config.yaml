@@ -154,6 +154,18 @@ credibility:
     - TBS News
     - UNB
 
+# ─── Demo access ─────────────────────────────────────────────────────────────
+# Visitors register once, then get a free trial. Registrations are rows in a Google Sheet:
+# the app's own filesystem is wiped on every reboot, and the team reads the leads there.
+# The deployed app needs `gsheet_id` and `[gcp_service_account]` in its Streamlit secrets;
+# without them it refuses to open (set DEMO_OPEN=1 to work on it locally).
+demo_access:
+  enabled: false              # true when the Google Sheet is configured
+  require: true
+  trial_days: 14
+  worksheet: users
+  contact_email: ""           # shown when a trial ends — put the address people should write to
+
 # ─── Brief: what happened, in a few lines ─────────────────────────────────────
 # The counts are computed in code; the LLM only turns the headlines into sentences.
 # Without an LLM key a plain version is written instead.

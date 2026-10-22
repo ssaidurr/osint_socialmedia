@@ -67,6 +67,35 @@ Protiti item-er sentiment, category, country ar ek line-er বাংলা summa
 
 LLM fail korle (key vul, rate limit, quota shesh, network) oi item-gulo lexicon diye analyze hoy, tai pipeline kokhono atke jay na.
 
+## Demo access: ke dekhche, ar koto din
+
+Dashboard-e dhukar age protiti manush ekta chhoto form bhore — **nam, work email, company, phone**. Tarpor **14 din** free access pay. Protiti registration ekta **Google Sheet**-e row hishebe jay, tai team Sheet kholei lead-er list dekhte, filter korte ar export korte pare.
+
+- Purono user email dilei dhuke jay (abar form bhorte hoy na)।
+- **14 din par hoye gele** sposhto message dekhay: "The demo for X ended on <date>" ar contact korte bole. Data dekhay na.
+- Refresh korle login thake — access token URL-e (`?k=...`) thake, tai barbar email dite hoy na।
+- Sheet-e `last_seen` ar `visits`-o update hoy, tai bojha jay ke asholey use korche.
+
+Trial-er din bodlate [config.yaml](config.yaml) → `demo_access.trial_days`. Meyad shesh howar message-e je email dekhabe sheta `demo_access.contact_email`-e boshao.
+
+### Setup (ekbar)
+
+1. **Google Sheet banao** (khali)। URL theke ID nao: `docs.google.com/spreadsheets/d/<EI_ONGSHO>/edit`
+2. **Google Cloud Console** (jekono project): APIs & Services → Library → **Google Sheets API** → Enable.
+3. **Service account banao**: Credentials → Create credentials → Service account → banar por **Keys → Add key → JSON** diye key download koro.
+4. **Sheet-ta service account-er email-e share koro** (JSON-er `client_email`), **Editor** access diye। Eta na korle app Sheet-e likhte parbe na।
+5. **Streamlit Cloud → app → Settings → Secrets**-e JSON-er field-gulo boshao — format [.streamlit/secrets.toml.example](.streamlit/secrets.toml.example)-e ache.
+
+Header row app nije banie ney, tomake kichu korte hobe na.
+
+### Local-e kaaj korar shomoy
+
+Secrets na thakle app **nije theke bondho thake** (jate deploy-e vul kore gate khola na thake)। Local-e gate chara chalate:
+
+```bash
+DEMO_OPEN=1 .venv/bin/streamlit run dashboard.py
+```
+
 ## Fact check ar credibility
 
 Protiti negative item-er ekta **Credibility score (5–95)** ar tar karon dashboard-e dekha jay.

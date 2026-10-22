@@ -236,7 +236,7 @@ def send_daily(conn, cfg: dict, dry_run: bool = False) -> dict:
     text_body = f"{_window_label(24).capitalize()}\n\n{brief['text']}\n"
     bullets = "".join(f"<li style='margin:6px 0'>{html.escape(line.lstrip('- ').strip())}</li>"
                       for line in brief["text"].splitlines() if line.strip())
-    html_body = f"""<div style="font-family:-apple-system,Segoe UI,Roboto,'Noto Sans Bengali',sans-serif;max-width:680px;color:#101828">
+    html_body = f"""<div style="font-family:-apple-system,Segoe UI,Roboto,'Noto Sans Bengali',sans-serif;max-width:680px;color:#101828;background:#ffffff;padding:20px;border-radius:10px">
 <div style="font-size:12px;color:#667085">OSINT Monitor · {_window_label(24)}</div>
 <h2 style="margin:4px 0 12px;font-size:19px">At a glance</h2>
 <ul style="padding-left:18px;font-size:15px;line-height:1.5">{bullets}</ul>

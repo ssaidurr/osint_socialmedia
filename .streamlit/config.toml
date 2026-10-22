@@ -1,0 +1,25 @@
+# The dashboard wears the SynergyAXN theme, so it reads as part of the same product:
+# the tokens below are the ones staging.synergyaxn.com ships in its own stylesheet
+# (--bg, --surface, --surface-2, --text, --muted, --accent, --accent-2, --positive, --negative),
+# with Geist and Geist Mono as the typefaces.
+[theme]
+base = "dark"
+backgroundColor = "#050607"                  # --bg
+secondaryBackgroundColor = "#0b0d10"         # --surface
+textColor = "#eceef1"                        # --text
+primaryColor = "#5ee6ff"                     # --accent
+linkColor = "#5ee6ff"
+borderColor = "#191b1d"                      # --line (white 8%) flattened onto the background
+dataframeBorderColor = "#191b1d"
+dataframeHeaderBackgroundColor = "#11141a"   # --surface-2
+codeBackgroundColor = "#11141a"
+baseRadius = "0.75rem"
+
+font = "Geist:https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap"
+headingFont = "Geist:https://fonts.googleapis.com/css2?family=Geist:wght@500;600&display=swap"
+codeFont = "Geist Mono:https://fonts.googleapis.com/css2?family=Geist+Mono&display=swap"
+
+# Chart colours come from the same palette. Sequential ramps start bright enough to stay
+# visible on the near-black surface (the faintest step still clears 2:1).
+chartCategoricalColors = ["#5ee6ff", "#8b7cff", "#f87171", "#4ade80", "#8a919c", "#ffd236"]
+chartSequentialColors = ["#224a53", "#2a5e68", "#31717e", "#388494", "#4098a9", "#48acbe", "#4fbfd4", "#56d2ea", "#5ee6ff"]
