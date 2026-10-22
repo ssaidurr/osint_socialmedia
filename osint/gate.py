@@ -35,7 +35,31 @@ def _admin_user(email: str) -> dict:
 
 def _is_admin(email: str, conf: dict) -> bool:
     admins = [registry.clean_email(a) for a in (conf.get("admin_emails") or [])]
-    return registry.clean_email(email) in admins
+    return bool(email) and registry.clean_email(email) in admins
+
+
+def _signed_in_email() -> str:
+    """The viewer's address, when the host knows it. Streamlit Community Cloud fills this in for
+    private apps (and any app with OIDC login); a public app has no idea who is looking."""
+    try:
+        return st.user.get("email") or ""
+    except Exception:
+        return ""
+
+
+def _admin_shortcut(conf: dict, sheet) -> dict | None:
+    """Us, arriving without typing anything: either the platform already knows the address, or
+    the bookmarked ?admin=<key> link is in the URL."""
+    email = _signed_in_email()
+    if _is_admin(email, conf):
+        return _admit(_admin_user(email), sheet)
+
+    key = _secret("admin_key")
+    given = st.query_params.get("admin")
+    if key and given and str(given) == str(key):
+        admins = conf.get("admin_emails") or ["admin"]
+        return _admit(_admin_user(admins[0]), sheet)
+    return None
 
 
 def _admit(user: dict, sheet) -> dict:
@@ -153,6 +177,10 @@ def require_access(cfg: dict) -> dict | None:
         detail = " ".join(str(cause).split())[:300] or type(cause).__name__
         st.caption(f"Reason: {detail}")
         st.stop()
+
+    admin = _admin_shortcut(conf, sheet)
+    if admin:
+        return admin
 
     expired = st.session_state.get("expired_user")
     if expired:

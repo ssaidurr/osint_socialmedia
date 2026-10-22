@@ -73,7 +73,9 @@ Dashboard-e dhukar age protiti manush ekta chhoto form bhore — **email, nam, p
 
 - Purono user **shudhu email** dilei dhuke jay — nam/phone/country abar chay na।
 - **Ek phone number-e ekta-i trial** — onno email diye abar cheshta korle bole dey kon address-e oi number agei registered. (Email bodle bar bar 14 din neowa bondho।)
-- **Admin-ra form-i dekhe na** — [config.yaml](config.yaml)-er `demo_access.admin_emails`-e je email thakbe, sheta diye shorasori dhuke jabe, Sheet-e kono row-o hobe na।
+- **Admin-ra form-i dekhe na** — tinta upay: (1) app **private** korle Streamlit nije viewer-er email bole dey, oi email `admin_emails`-e thakle shorasori dhuke jay; (2) secrets-e `admin_key = "..."` dile `?admin=<key>` link bookmark kore rakha jay; (3) emni-i oi email likhe Continue.
+
+  Agerca niyom — [config.yaml](config.yaml)-er `demo_access.admin_emails`-e je email thakbe, sheta diye shorasori dhuke jabe, Sheet-e kono row-o hobe na।
 - **14 din par hoye gele** data bondho. Screen-e meyad shesh-er kotha ar ekta chhoto form — ki kaaj-e lagbe likhe pathate pare. Oi request Sheet-er **"requests"** tab-e row hoye jay (shomoy, email, nam, phone, country, message), tai follow-up kora shoja.
 - Refresh korle login thake — access token URL-e (`?k=...`) thake, tai barbar email dite hoy na।
 - Sheet-e `last_seen` ar `visits`-o update hoy, tai bojha jay ke asholey use korche.
