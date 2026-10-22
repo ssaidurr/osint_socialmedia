@@ -160,7 +160,7 @@ credibility:
 # The deployed app needs `gsheet_id` and `[gcp_service_account]` in its Streamlit secrets;
 # without them it refuses to open (set DEMO_OPEN=1 to work on it locally).
 demo_access:
-  enabled: false              # true when the Google Sheet is configured
+  enabled: true
   require: true
   trial_days: 14
   worksheet: users
