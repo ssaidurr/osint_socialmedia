@@ -11,7 +11,7 @@ import pandas as pd
 import requests
 import streamlit as st
 
-from osint import db, gate
+from osint import countries, db, gate
 from osint.analyzer import CATEGORIES
 from osint.config import TICKETS_DIR, load_config, to_local
 
@@ -153,9 +153,10 @@ f1, f2, f3, f4 = st.columns([1, 2, 1.4, 0.6], vertical_alignment="bottom")
 range_name = f1.selectbox("Time range", list(RANGES), index=1)
 all_types = sorted(items["source_type"].unique())
 types = f2.multiselect("Source type", all_types, default=all_types)
-country_options = sorted(items["country"].dropna().unique())
-countries = f3.multiselect("Country", country_options, disabled=not country_options,
-                           help="The country an item is mainly about, as identified by the analyzer")
+country_options = sorted(items["country"].dropna().unique(), key=countries.label)
+picked_countries = f3.multiselect("Country", country_options, disabled=not country_options,
+                                  format_func=countries.label,
+                                  help="The country an item is mainly about, as identified by the analyzer")
 if not country_options:
     f3.caption("No country data yet — it is filled on the next monitor run.")
 if f4.button("↻ Refresh", width="stretch"):
@@ -176,8 +177,8 @@ with st.container(border=True):
     else:
         st.caption("No brief for this range yet — one is written on the next monitor run.")
 df = items[(items["ts"] >= now - pd.Timedelta(hours=hours)) & items["source_type"].isin(types)]
-if countries:
-    df = df[df["country"].isin(countries)]
+if picked_countries:
+    df = df[df["country"].isin(picked_countries)]
 haystack = None
 if search.strip():
     # Every word must appear somewhere in the item, in any order
@@ -311,6 +312,7 @@ with c4:
         st.caption("No country identified for these items yet — run `python main.py analyze` after an update.")
     else:
         cdf = by_country.value_counts().head(12).rename_axis("country").reset_index(name="count")
+        cdf["country"] = cdf["country"].map(countries.label)
         base = alt.Chart(cdf).encode(
             y=alt.Y("country:N", sort="-x", title=None),
             x=alt.X("count:Q", title="Negative items", axis=alt.Axis(tickMinStep=1)),
@@ -348,6 +350,7 @@ view = neg[neg["category_label"].isin(cat_filter)] if cat_filter else neg
 if only_doubtful:
     view = view[view["credibility"] < 40]
 view = view.assign(
+    country=view["country"].map(countries.label),
     headline=view["title"].where(view["title"].fillna("") != "", view["text"].str[:160]),
     factcheck=(view["factcheck_rating"].fillna("") + " — " + view["factcheck_publisher"].fillna("")).str.strip(" —"),
 )

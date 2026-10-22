@@ -13,7 +13,7 @@ import argparse
 import logging
 import time
 
-from osint import db
+from osint import countries, db
 from osint.alerts import category_label, check_and_alert, send_test_email
 from osint.analyzer import analyze_pending, backfill_country, refresh_english_summaries
 from osint.collectors import collect_all
@@ -143,7 +143,8 @@ def report(conn, cfg, hours: float) -> None:
                AND ts >= ? GROUP BY country ORDER BY n DESC LIMIT 8""", (s["since"],)).fetchall()
         if top_countries:
             print("\nNegative items by country:")
-            print("  " + " · ".join(f"{r['country']} {r['n']}" for r in top_countries))
+            for r in top_countries:
+                print(f"  {countries.label(r['country']):<34} {r['n']:>4}")
         print("\nMost severe:")
         for it in db.top_negative(conn, s["since"], 8):
             print(f"  [{it['severity']}] {(it['title'] or it['text'])[:90]} — {it['source']}")

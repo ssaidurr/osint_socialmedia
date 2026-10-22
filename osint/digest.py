@@ -13,6 +13,7 @@ import os
 
 from . import db
 from .analyzer import CATEGORIES, resolve_provider
+from .countries import NAMES as COUNTRY_NAMES
 from .credibility import _containment, _grams
 
 log = logging.getLogger(__name__)
@@ -102,7 +103,7 @@ def _facts_line(facts: dict) -> str:
     """The totals, written in code. An LLM asked to repeat figures will eventually mangle one
     (we watched 57% come back as "5.7%"), and a wrong number in a brief is worse than no number."""
     topics = ", ".join(list(facts["top_topics"])[:3]) or "—"
-    countries = ", ".join(list(facts["top_countries"])[:4]) or "—"
+    countries = ", ".join(COUNTRY_NAMES.get(c, c) for c in list(facts["top_countries"])[:4]) or "—"
     return (f"- Overall: {facts['items']:,} items · {facts['negative_share']}% negative · "
             f"countries: {countries} · topics: {topics}")
 
