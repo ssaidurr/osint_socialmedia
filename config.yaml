@@ -20,7 +20,6 @@ google_news:
     # A country's own news. NATION only returns anything for some editions — these were checked;
     # BD/en, UAE, Saudi, Egypt, Turkey and Qatar come back empty, so they are covered by search below.
     - { topic: NATION, lang: bn, country: BD }
-    - { topic: NATION, country: IL }
     - { topic: NATION, country: PK }
     # Keyword searches reach what the topic feeds miss
     - { query: "Bangladesh", country: BD }
@@ -44,12 +43,11 @@ rss_feeds:
   - { name: "Sky News", url: "https://feeds.skynews.com/feeds/rss/world.xml" }
   - { name: "Times of India", url: "https://timesofindia.indiatimes.com/rssfeeds/296589292.cms" }
   - { name: "ABC (Australia)", url: "https://www.abc.net.au/news/feed/51120/rss.xml" }
-  # Middle East — deliberately from several sides, since each covers what the others leave out
+  # Middle East. Israeli outlets were removed on request; the region is covered by the sources
+  # below plus the global wires, which still carry Israel/Gaza stories.
   - { name: "Middle East Eye", url: "https://www.middleeasteye.net/rss" }
   - { name: "Al Monitor", url: "https://www.al-monitor.com/rss" }
   - { name: "Anadolu (Middle East)", url: "https://www.aa.com.tr/en/rss/default?cat=middle-east" }
-  - { name: "Times of Israel", url: "https://www.timesofisrael.com/feed/" }
-  - { name: "Jerusalem Post", url: "https://www.jpost.com/rss/rssfeedsfrontpage.aspx" }
   - { name: "Daily Sabah", url: "https://www.dailysabah.com/rssFeed/10" }
   - { name: "Tehran Times", url: "https://www.tehrantimes.com/rss" }
   - { name: "Egypt Independent", url: "https://egyptindependent.com/feed/" }
@@ -160,8 +158,6 @@ credibility:
     - ReliefWeb
     - Middle East Eye
     - Al Monitor
-    - Times of Israel
-    - Jerusalem Post
     - t.me/bloomberg          # a newsroom's own Telegram channel counts as that newsroom
     # Bangladesh outlets
     - Prothom Alo
