@@ -183,21 +183,39 @@ def _youtube_due(conn, every_minutes: float) -> bool:
     return not last or datetime.now(timezone.utc) - datetime.fromisoformat(last) >= timedelta(minutes=every_minutes)
 
 
+def _rotate(jobs: list, per_run: int, conn, key: str) -> list:
+    """Take the next `per_run` jobs, remembering where we stopped.
+
+    Asking every source every run collects tens of thousands of items a day — more than the
+    free analysis quota covers and more than the published database can hold. Taking turns
+    keeps every source in the mix while the volume stays inside both budgets."""
+    total = len(jobs)
+    if conn is None or not per_run or total <= per_run:
+        return jobs
+    start = int(get_state(conn, key) or 0) % total
+    picked = [jobs[(start + i) % total] for i in range(per_run)]
+    set_state(conn, key, str((start + per_run) % total))
+    return picked
+
+
 def collect_all(cfg: dict, conn=None) -> tuple[list[dict], dict[str, int | str]]:
     """Run every configured collector. A failing source is logged and skipped, not fatal.
     `conn` lets rate-limited sources (YouTube) remember when they last ran."""
     jobs = []
     gn = cfg.get("google_news") or {}
+    gn_jobs = []
     for entry in (gn.get("feeds") or gn.get("queries") or []):
         lang, country = entry.get("lang", gn.get("lang", "en")), entry.get("country", gn.get("country", "US"))
         if entry.get("topic"):
-            jobs.append((f"Google News topic: {entry['topic']}",
-                         lambda t=entry["topic"], l=lang, c=country: google_news_topic(t, l, c)))
+            gn_jobs.append((f"Google News topic: {entry['topic']}",
+                            lambda t=entry["topic"], l=lang, c=country: google_news_topic(t, l, c)))
         else:
-            jobs.append((f"Google News: {entry['query']}",
-                         lambda q=entry["query"], l=lang, c=country: google_news(q, l, c, gn.get("window", "1d"))))
-    for f in cfg.get("rss_feeds") or []:
-        jobs.append((f"RSS: {f['name']}", lambda f=f: rss_feed(f["name"], f["url"])))
+            gn_jobs.append((f"Google News: {entry['query']}",
+                            lambda q=entry["query"], l=lang, c=country: google_news(q, l, c, gn.get("window", "1d"))))
+    jobs += _rotate(gn_jobs, gn.get("per_run", 0), conn, "google_news_cursor")
+    rss_jobs = [(f"RSS: {f['name']}", lambda f=f: rss_feed(f["name"], f["url"]))
+                for f in (cfg.get("rss_feeds") or [])]
+    jobs += _rotate(rss_jobs, (cfg.get("rss_per_run") or 0), conn, "rss_cursor")
     rd = cfg.get("reddit") or {}
     # Posts and comments are separate jobs so a rate-limited comments feed doesn't discard the posts
     reddit_kinds = ["reddit_post"] + (["reddit_comment"] if rd.get("include_comments", True) else [])
@@ -212,23 +230,19 @@ def collect_all(cfg: dict, conn=None) -> tuple[list[dict], dict[str, int | str]]
     # Reddit rate-limits unauthenticated readers hard: ask for everything every run and most of it
     # comes back 429. A few feeds per run, taking the next few each time, covers them all within
     # a handful of runs and keeps every request inside the limit.
-    per_run = rd.get("per_run", 3)
-    total = len(reddit_jobs)
-    if conn is not None and per_run and total > per_run:
-        start = int(get_state(conn, "reddit_cursor") or 0) % total
-        reddit_jobs = [reddit_jobs[(start + i) % total] for i in range(per_run)]
-        set_state(conn, "reddit_cursor", str((start + per_run) % total))
-    jobs += reddit_jobs
+    jobs += _rotate(reddit_jobs, rd.get("per_run", 3), conn, "reddit_cursor")
 
     tg = cfg.get("telegram") or {}
     for channel in tg.get("channels", []):
         jobs.append((f"Telegram: {channel}", lambda channel=channel: telegram(channel, tg.get("limit", 40))))
 
     md = cfg.get("mastodon") or {}
+    md_jobs = []
     for instance in md.get("instances", []):
         for tag in md.get("tags", []):
-            jobs.append((f"Mastodon: #{tag} @{instance}",
-                         lambda instance=instance, tag=tag: mastodon(instance, tag, md.get("limit", 40))))
+            md_jobs.append((f"Mastodon: #{tag} @{instance}",
+                            lambda instance=instance, tag=tag: mastodon(instance, tag, md.get("limit", 40))))
+    jobs += _rotate(md_jobs, md.get("per_run", 0), conn, "mastodon_cursor")
     yt, yt_key = cfg.get("youtube") or {}, os.getenv("YOUTUBE_API_KEY")
     summary: dict[str, int | str] = {}
     if yt.get("queries") and yt_key:

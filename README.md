@@ -17,19 +17,26 @@ Default-e **global** news ar social media monitor kore. Kono ekta desh, brand ba
 
 | Source | Ki pay | Setup |
 |---|---|---|
-| Google News | Topic feed (TOP, WORLD, BUSINESS, HEALTH) + US/UK/India edition, ar chaile keyword search | Kichu lagbe na |
-| News RSS | **Global:** BBC, Al Jazeera, Guardian, NYT, CNN, NPR, DW, France 24, Sky News, Times of India, ABC (AU) · **Middle East:** Al Jazeera, Middle East Eye, Al Monitor, Anadolu, Daily Sabah, Tehran Times, Egypt Independent · **Bangladesh:** Prothom Alo, Daily Star, TBS News | Kichu lagbe na |
-| Reddit (subreddit) | r/worldnews, r/news, r/bangladesh, r/MiddleEast — post **ar comment**. Reddit onek request-e 429 dey, tai protiti run-e tinta feed, pala kore (config-e `reddit.per_run`) | Kichu lagbe na |
-| Reddit (search) | Puro Reddit-e keyword diye khoja notun post | Kichu lagbe na |
-| Telegram | Public channel-er post (default: Bloomberg) | Kichu lagbe na — channel-er public preview page pora hoy |
-| Mastodon | Public hashtag timeline (#news, #worldnews, #politics) | Kichu lagbe na |
-| YouTube | Video + comment (default worldwide) | `YOUTUBE_API_KEY` (free, niche dekhun) |
+| Google News | 32-ta feed: topic (TOP, WORLD, BUSINESS, HEALTH), desh-er edition, ar keyword/`site:` search | Kichu lagbe na |
+| News RSS | 53-ta outlet — global wire, Europe, Asia, Africa, Americas, Middle East, Bangladesh, ar science/health/climate/cyber | Kichu lagbe na |
+| Reddit | 7-ta subreddit-er post ar comment | Kichu lagbe na |
+| Telegram | 5-ta public channel | Kichu lagbe na |
+| Mastodon | 16-ta hashtag timeline | Kichu lagbe na |
+| YouTube | Video + comment, 3-ta query | `YOUTUBE_API_KEY` (free) |
 
-Reddit unauthenticated request-e kothin rate limit (429) dey. Ekta feed fail korle baki source-gulo thik-i chole, ar oi feed porer run-e chesta kore.
+**Pala kore ana (rotation):** shob source protiti run-e anle dine 50,000+ item hoye jay — sheta free analysis quota-r baire, ar GitHub-e rakha database-er limit-eo chariye jay. Tai protiti run-e ekta ongsho ashe, ar pala ghure shob source cover hoy: Google News 10/32, RSS 18/53, Mastodon 6/16, Reddit 4/14 ([config.yaml](config.yaml)-e `per_run`)।
 
-**Telegram niye ekta kotha:** boro outlet-er beshirbhag channel ekhon nishkriyo (CNN, AP, France 24-er shesh post 2023 saal-er). RT ar Sputnik active, kintu rashtro-niyontrito — tai default-e rakha hoyni.
+**Je shima-r modhye thakte hobe:**
 
-**Bangladesh-er RSS:** Prothom Alo, Daily Star, Risingbd, TBS News kaaj kore ([config.yaml](config.yaml)-e comment kora ache). Kaler Kantho, Samakal, Ittefaq, Jugantor, Dhaka Post, UNB, New Age, Somoy, Jagonews24, Banglanews24 — egulo hoy bot block kore, noy kaaj kora RSS feed nei. Tobe Google News egulor khobor ene dey.
+| | Hisheb |
+|---|---|
+| Protiti item | ~300 bytes (gzipped) |
+| GitHub-e nirapod shima | ~150,000 item (~45 MB) |
+| Ekhonkar obostha | ~5,000 item/din × 21 din = ~50,000 item, 14 MB |
+
+Volume barate chaile `per_run` barao, ar sheই shathe `retention_days` komao — na hole ekdin push fail korbe.
+
+**Blocked outlet-er tricks:** Arab News, Al Arabiya, Gulf News, The National, Haaretz, New Age, bdnews24, Jugantor, Kaler Kantho, Samakal, Ittefaq — egulo nijeder feed-e bot block kore, kintu **Google News-er `site:` search** diye tader khobor-o ashe.
 
 ### Ja add kora jay ni (ar keno)
 

@@ -2,7 +2,7 @@
 # Secrets (API key, SMTP password) go in .env, not here.
 
 timezone: Asia/Dhaka          # used for display in emails and the dashboard
-retention_days: 30            # items older than this are deleted so the database stays small (matters on GitHub)
+retention_days: 21            # items older than this are deleted so the database stays small (matters on GitHub)
 
 # Google News. `topic` pulls a whole section, `query` searches a keyword.
 # Topics: TOP, WORLD, NATION, BUSINESS, TECHNOLOGY, SCIENCE, HEALTH, SPORTS, ENTERTAINMENT
@@ -10,6 +10,7 @@ google_news:
   lang: en
   country: US
   window: 1d
+  per_run: 10          # feeds per run, in turn — all 32 are covered across a few runs
   feeds:
     - { topic: TOP }
     - { topic: WORLD }
@@ -33,7 +34,23 @@ google_news:
     - { query: "Lebanon OR Yemen OR Syria" }
     - { query: "Egypt OR Turkey" }
     - { query: "Palestine" }
+    # Outlets that block a direct feed request still show up through Google News
+    - { query: "site:reuters.com" }
+    - { query: "site:apnews.com" }
+    - { query: "site:bloomberg.com" }
+    - { query: "site:newagebd.net", country: BD }
+    - { query: "site:bdnews24.com", country: BD }
+    - { query: "site:jugantor.com", lang: bn, country: BD }
+    - { query: "site:kalerkantho.com", lang: bn, country: BD }
+    - { query: "site:samakal.com", lang: bn, country: BD }
+    - { query: "site:ittefaq.com.bd", lang: bn, country: BD }
+    - { query: "site:arabnews.com", country: SA }
+    - { query: "site:english.alarabiya.net", country: AE }
+    - { query: "site:gulfnews.com", country: AE }
+    - { query: "site:thenationalnews.com", country: AE }
     # - { query: "your brand or topic" }
+
+rss_per_run: 18        # of the feeds below, this many per run, taking turns
 
 rss_feeds:
   # Global
@@ -56,6 +73,43 @@ rss_feeds:
   - { name: "Daily Sabah", url: "https://www.dailysabah.com/rssFeed/10" }
   - { name: "Tehran Times", url: "https://www.tehrantimes.com/rss" }
   - { name: "Egypt Independent", url: "https://egyptindependent.com/feed/" }
+  # Wires, Europe, Asia, Africa, Americas
+  - { name: "UN News", url: "https://news.un.org/feed/subscribe/en/news/all/rss.xml" }
+  - { name: "Euronews", url: "https://www.euronews.com/rss" }
+  - { name: "Politico EU", url: "https://www.politico.eu/feed/" }
+  - { name: "The Economist", url: "https://www.economist.com/latest/rss.xml" }
+  - { name: "CNBC", url: "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100727362" }
+  - { name: "Financial Times", url: "https://www.ft.com/rss/home" }
+  - { name: "El País", url: "https://feeds.elpais.com/mrss-s/pages/ep/site/english.elpais.com/portada" }
+  - { name: "Le Monde", url: "https://www.lemonde.fr/en/rss/une.xml" }
+  - { name: "CBC", url: "https://www.cbc.ca/webfeed/rss/rss-world" }
+  - { name: "Buenos Aires Times", url: "https://www.batimes.com.ar/feed" }
+  - { name: "AllAfrica", url: "https://allafrica.com/tools/headlines/rdf/latest/headlines.rdf" }
+  - { name: "South China Morning Post", url: "https://www.scmp.com/rss/91/feed" }
+  - { name: "Japan Times", url: "https://www.japantimes.co.jp/feed/" }
+  - { name: "Channel News Asia", url: "https://www.channelnewsasia.com/api/v1/rss-outbound-feed?_format=xml" }
+  - { name: "Nikkei Asia", url: "https://asia.nikkei.com/rss/feed/nar" }
+  # South Asia
+  - { name: "The Hindu", url: "https://www.thehindu.com/news/international/feeder/default.rss" }
+  - { name: "NDTV", url: "https://feeds.feedburner.com/ndtvnews-world-news" }
+  - { name: "Hindustan Times", url: "https://www.hindustantimes.com/feeds/rss/world-news/rssfeed.xml" }
+  - { name: "Dawn", url: "https://www.dawn.com/feeds/home" }
+  - { name: "Kathmandu Post", url: "https://kathmandupost.com/rss" }
+  - { name: "Guardian Bangladesh", url: "https://www.theguardian.com/world/bangladesh/rss" }
+  # More Middle East
+  - { name: "Guardian Middle East", url: "https://www.theguardian.com/world/middleeast/rss" }
+  - { name: "Middle East Monitor", url: "https://www.middleeastmonitor.com/feed/" }
+  - { name: "Press TV", url: "https://www.presstv.ir/rss.xml" }
+  - { name: "Al Jazeera Arabic", url: "https://www.aljazeera.net/aljazeerarss/a7c186be-1baa-4bd4-9d80-a84db769f779/73d0e1b4-532f-45ef-b135-bfdff8b8cab9" }
+  # Science, health, climate, security
+  - { name: "WHO", url: "https://www.who.int/rss-feeds/news-english.xml" }
+  - { name: "Nature", url: "https://www.nature.com/nature.rss" }
+  - { name: "Science Daily", url: "https://www.sciencedaily.com/rss/top/science.xml" }
+  - { name: "Carbon Brief", url: "https://www.carbonbrief.org/feed" }
+  - { name: "The Record", url: "https://therecord.media/feed" }
+  - { name: "Krebs on Security", url: "https://krebsonsecurity.com/feed/" }
+  - { name: "TechCrunch", url: "https://techcrunch.com/feed/" }
+  - { name: "Ars Technica", url: "https://feeds.arstechnica.com/arstechnica/index" }
   # Bangladesh
   - { name: "Prothom Alo", url: "https://www.prothomalo.com/feed/" }
   - { name: "The Daily Star", url: "https://www.thedailystar.net/frontpage/rss.xml" }
@@ -66,9 +120,9 @@ rss_feeds:
 
 # Public Reddit posts + latest comments (no login needed)
 reddit:
-  subreddits: [worldnews, news, bangladesh, MiddleEast]
+  subreddits: [worldnews, news, bangladesh, MiddleEast, geopolitics, india, pakistan]
   include_comments: true
-  per_run: 3                    # feeds per run, taken in turn — Reddit 429s if you ask for them all
+  per_run: 4                    # feeds per run, taken in turn — Reddit 429s if you ask for them all
   searches: []                  # keyword search across all of Reddit, e.g. ["your brand"]
   search_limit: 25
 
@@ -76,7 +130,7 @@ reddit:
 # Most big outlets abandoned Telegram (CNN, AP, France 24 last posted in 2023).
 # rtnews and sputniknews are still active but state-run — add them only if you want that in the mix.
 telegram:
-  channels: [bloomberg, thedailystar, almayadeen, trtworld]
+  channels: [bloomberg, thedailystar, almayadeen, trtworld, QudsNen]
   # almayadeen and trtworld are state-aligned newsrooms. They are here because they report what
   # the others do not, not because they are trusted — they are kept out of trusted_sources.
   limit: 40
@@ -84,10 +138,12 @@ telegram:
 # Public Mastodon hashtag timelines (open, no key)
 mastodon:
   instances: [mastodon.social]
-  tags: [worldnews, bangladesh, gaza, palestine, middleeast, iran, lebanon]
+  tags: [worldnews, breakingnews, geopolitics, bangladesh, gaza, palestine, middleeast,
+         iran, lebanon, ukraine, russia, china, india, africa, climate, economy]
   # #news and #politics were dropped: between them they were a quarter of everything collected,
   # almost all US chatter, and they drowned the regional feeds.
   limit: 40
+  per_run: 6           # tags per run, in turn
 
 # YouTube videos + comments. Needs YOUTUBE_API_KEY in .env (free, Google Cloud Console).
 # Skipped automatically when no key is set.
@@ -110,8 +166,8 @@ analyzer:
   claude_model: claude-opus-5
   claude_effort: low          # low is enough for classification; raise if accuracy is poor
   openai_model: gpt-5.4-mini  # OpenAI has no free tier; every call is billed
-  batch_size: 25
-  max_items_per_run: 500
+  batch_size: 50       # bigger batches mean fewer API calls for the same items
+  max_items_per_run: 800   # keeps a run near 8 minutes; the rest waits for the next one
 
 # ─── Credibility check (negative items) ───────────────────────────────────────
 # NOT a "% true" score — nothing can compute that. It combines three measurable signals:
