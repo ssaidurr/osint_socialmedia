@@ -19,7 +19,7 @@ Default-e **global** news ar social media monitor kore. Kono ekta desh, brand ba
 |---|---|---|
 | Google News | Topic feed (TOP, WORLD, BUSINESS, HEALTH) + US/UK/India edition, ar chaile keyword search | Kichu lagbe na |
 | News RSS | **Global:** BBC, Al Jazeera, Guardian, NYT, CNN, NPR, DW, France 24, Sky News, Times of India, ABC (AU) · **Middle East:** Middle East Eye, Al Monitor, Anadolu, Times of Israel, Jerusalem Post, Daily Sabah, Tehran Times, Egypt Independent · **Bangladesh:** Prothom Alo, Daily Star, TBS News | Kichu lagbe na |
-| Reddit (subreddit) | r/worldnews, r/news, r/bangladesh, r/MiddleEast — post **ar comment**. Reddit onek request-e 429 dey, tai protiti run-e tinta feed, pala kore () | Kichu lagbe na |
+| Reddit (subreddit) | r/worldnews, r/news, r/bangladesh, r/MiddleEast — post **ar comment**. Reddit onek request-e 429 dey, tai protiti run-e tinta feed, pala kore (config-e `reddit.per_run`) | Kichu lagbe na |
 | Reddit (search) | Puro Reddit-e keyword diye khoja notun post | Kichu lagbe na |
 | Telegram | Public channel-er post (default: Bloomberg) | Kichu lagbe na — channel-er public preview page pora hoy |
 | Mastodon | Public hashtag timeline (#news, #worldnews, #politics) | Kichu lagbe na |
