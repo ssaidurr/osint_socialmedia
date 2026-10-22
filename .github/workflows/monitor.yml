@@ -34,6 +34,8 @@ jobs:
           if git fetch --depth=1 origin data; then
             # Working tree only: staging these files would make the save step's `git rm --cached` refuse
             git restore --source=FETCH_HEAD -- data
+            # The branch holds the database gzipped — raw it is ~59 MB, past what GitHub likes
+            [ -f data/osint.db.gz ] && gunzip -fc data/osint.db.gz > data/osint.db || true
           else
             echo "No data branch yet: starting with an empty database"
           fi
@@ -55,8 +57,10 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           # A single-commit orphan branch holds only the latest snapshot, so the repo never grows
+          gzip -9fc data/osint.db > data/osint.db.gz   # ~3x smaller, and well clear of GitHub's limits
           git checkout --orphan data-snapshot
           git rm -rq --cached .
-          git add -f data/
+          git add -f data/osint.db.gz
+          [ -d data/tickets ] && git add -f data/tickets || true
           git commit -qm "Monitor data $(date -u +%Y-%m-%dT%H:%MZ)"
           git push -qf origin HEAD:data

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import difflib
+import gzip
 import os
 import re
 
@@ -63,7 +64,12 @@ def fetch_remote(path: str) -> tuple[bytes | None, int]:
 @st.cache_data(ttl=60)
 def load() -> tuple[pd.DataFrame, pd.DataFrame, int]:
     if REMOTE_REPO:
-        content, _ = fetch_remote("data/osint.db")
+        # The monitor stores the database gzipped (a third of the size over the wire)
+        content, _ = fetch_remote("data/osint.db.gz")
+        if content:
+            content = gzip.decompress(content)
+        else:
+            content, _ = fetch_remote("data/osint.db")      # branches written before that change
         if content:
             db.DB_PATH.parent.mkdir(exist_ok=True)
             db.DB_PATH.write_bytes(content)
