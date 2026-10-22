@@ -2,7 +2,11 @@
 # Secrets (API key, SMTP password) go in .env, not here.
 
 timezone: Asia/Dhaka          # used for display in emails and the dashboard
-retention_days: 21            # items older than this are deleted so the database stays small (matters on GitHub)
+# The published database sits in a git branch, so its size is the binding constraint: roughly
+# 300 bytes per item gzipped, and ~150,000 items is as much as GitHub takes comfortably.
+# News keeps a long window; social chatter is most of the volume and gets a short one.
+retention_days: 14            # news, Telegram
+social_retention_days: 4      # Mastodon, Reddit, YouTube
 
 # Google News. `topic` pulls a whole section, `query` searches a keyword.
 # Topics: TOP, WORLD, NATION, BUSINESS, TECHNOLOGY, SCIENCE, HEALTH, SPORTS, ENTERTAINMENT
@@ -10,7 +14,7 @@ google_news:
   lang: en
   country: US
   window: 1d
-  per_run: 10          # feeds per run, in turn — all 32 are covered across a few runs
+  per_run: 14          # feeds per run, in turn — all 32 are covered across a few runs
   feeds:
     - { topic: TOP }
     - { topic: WORLD }
@@ -48,9 +52,50 @@ google_news:
     - { query: "site:english.alarabiya.net", country: AE }
     - { query: "site:gulfnews.com", country: AE }
     - { query: "site:thenationalnews.com", country: AE }
+    - { query: "site:alkhaleej.ae", lang: ar, country: AE }
+    - { query: "site:emaratalyoum.com", lang: ar, country: AE }
+    - { query: "site:ahram.org.eg", country: EG }
+    - { query: "site:naharnet.com", country: LB }
+    - { query: "site:iranintl.com", country: IR }
+    - { query: "site:hurriyetdailynews.com", country: TR }
+    # Each country's own Google News edition, in its own language — the local front page
+    - { topic: TOP, lang: ar, country: SA }
+    - { topic: TOP, lang: ar, country: AE }
+    - { topic: TOP, lang: ar, country: EG }
+    - { topic: TOP, lang: ar, country: LB }
+    - { topic: TOP, lang: fa, country: IR }
+    - { topic: TOP, lang: tr, country: TR }
+    - { topic: TOP, lang: en, country: PK }
+    - { topic: TOP, lang: ru, country: RU }
+    - { topic: TOP, lang: uk, country: UA }
+    - { topic: TOP, lang: de, country: DE }
+    - { topic: TOP, lang: fr, country: FR }
+    - { topic: TOP, lang: es, country: ES }
+    - { topic: TOP, lang: it, country: IT }
+    - { topic: TOP, lang: pt, country: PT }
+    - { topic: TOP, lang: pt-BR, country: BR }
+    - { topic: TOP, lang: es-419, country: MX }
+    - { topic: TOP, lang: es-419, country: AR }
+    - { topic: TOP, lang: en, country: NG }
+    - { topic: TOP, lang: en, country: ZA }
+    - { topic: TOP, lang: en, country: KE }
+    - { topic: TOP, lang: en, country: ET }
+    - { topic: TOP, lang: id, country: ID }
+    - { topic: TOP, lang: en, country: PH }
+    - { topic: TOP, lang: vi, country: VN }
+    - { topic: TOP, lang: th, country: TH }
+    - { topic: TOP, lang: ms, country: MY }
+    - { topic: TOP, lang: en, country: SG }
+    - { topic: TOP, lang: ja, country: JP }
+    - { topic: TOP, lang: ko, country: KR }
+    - { topic: TOP, lang: zh-CN, country: CN }
+    - { topic: TOP, lang: en, country: AU }
+    - { topic: TOP, lang: en, country: CA }
+    - { topic: TOP, lang: en, country: NZ }
+    # LK, NP, MM and AF were tried: Google serves them a generic edition, not local news
     # - { query: "your brand or topic" }
 
-rss_per_run: 18        # of the feeds below, this many per run, taking turns
+rss_per_run: 22        # of the feeds below, this many per run, taking turns
 
 rss_feeds:
   # Global
@@ -101,6 +146,16 @@ rss_feeds:
   - { name: "Middle East Monitor", url: "https://www.middleeastmonitor.com/feed/" }
   - { name: "Press TV", url: "https://www.presstv.ir/rss.xml" }
   - { name: "Al Jazeera Arabic", url: "https://www.aljazeera.net/aljazeerarss/a7c186be-1baa-4bd4-9d80-a84db769f779/73d0e1b4-532f-45ef-b135-bfdff8b8cab9" }
+  # Arabic-language newsrooms — most of the region's reporting is published in Arabic first
+  - { name: "BBC Arabic", url: "https://feeds.bbci.co.uk/arabic/rss.xml" }
+  - { name: "France 24 Arabic", url: "https://www.france24.com/ar/rss" }
+  - { name: "DW Arabic", url: "https://rss.dw.com/rdf/rss-ar-all" }
+  - { name: "Anadolu Arabic", url: "https://www.aa.com.tr/ar/rss/default?cat=guncel" }
+  - { name: "Asharq Al-Awsat", url: "https://aawsat.com/feed" }
+  - { name: "Al Masry Al Youm", url: "https://www.almasryalyoum.com/rss/rssfeeds" }
+  - { name: "RT Arabic", url: "https://arabic.rt.com/rss/" }
+  - { name: "Yeni Safak", url: "https://www.yenisafak.com/en/rss" }
+  - { name: "Daily News Egypt", url: "https://www.dailynewsegypt.com/feed/" }
   # Science, health, climate, security
   - { name: "WHO", url: "https://www.who.int/rss-feeds/news-english.xml" }
   - { name: "Nature", url: "https://www.nature.com/nature.rss" }
@@ -263,7 +318,7 @@ demo_access:
 # Without an LLM key a plain version is written instead.
 digest:
   enabled: true
-  windows: [6, 24, 72, 168, 720]   # one per time range in the dashboard: 6h, 24h, 3d, 7d, 30d
+  windows: [6, 24, 72, 168, 336]   # one per time range in the dashboard: 6h, 24h, 3d, 7d, 14d
   every_hours: 6              # how often a brief is rewritten (each one costs one LLM call)
   max_stories: 45             # headlines sent per brief; near-duplicates are merged first
   email: true                 # send the 24h brief once a day

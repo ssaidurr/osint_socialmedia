@@ -17,14 +17,14 @@ Default-e **global** news ar social media monitor kore. Kono ekta desh, brand ba
 
 | Source | Ki pay | Setup |
 |---|---|---|
-| Google News | 32-ta feed: topic (TOP, WORLD, BUSINESS, HEALTH), desh-er edition, ar keyword/`site:` search | Kichu lagbe na |
-| News RSS | 53-ta outlet — global wire, Europe, Asia, Africa, Americas, Middle East, Bangladesh, ar science/health/climate/cyber | Kichu lagbe na |
+| Google News | **71-ta feed**: topic, **33-ta desh-er nijer edition** (nijer bhashay — Arabic, Farsi, Turkish, Bangla, Russian, Japanese...), keyword ar `site:` search | Kichu lagbe na |
+| News RSS | **62-ta outlet** — global wire, Europe, Asia, Africa, Americas, Middle East (Arabic shoho), Bangladesh, ar science/health/climate/cyber | Kichu lagbe na |
 | Reddit | 7-ta subreddit-er post ar comment | Kichu lagbe na |
 | Telegram | 5-ta public channel | Kichu lagbe na |
 | Mastodon | 16-ta hashtag timeline | Kichu lagbe na |
 | YouTube | Video + comment, 3-ta query | `YOUTUBE_API_KEY` (free) |
 
-**Pala kore ana (rotation):** shob source protiti run-e anle dine 50,000+ item hoye jay — sheta free analysis quota-r baire, ar GitHub-e rakha database-er limit-eo chariye jay. Tai protiti run-e ekta ongsho ashe, ar pala ghure shob source cover hoy: Google News 10/32, RSS 18/53, Mastodon 6/16, Reddit 4/14 ([config.yaml](config.yaml)-e `per_run`)।
+**Pala kore ana (rotation):** shob source protiti run-e anle dine 50,000+ item hoye jay — sheta free analysis quota-r baire, ar GitHub-e rakha database-er limit-eo chariye jay. Tai protiti run-e ekta ongsho ashe, ar pala ghure shob source cover hoy: Google News 14/71, RSS 22/62, Mastodon 6/16, Reddit 4/14 ([config.yaml](config.yaml)-e `per_run`)।
 
 **Je shima-r modhye thakte hobe:**
 
@@ -32,7 +32,9 @@ Default-e **global** news ar social media monitor kore. Kono ekta desh, brand ba
 |---|---|
 | Protiti item | ~300 bytes (gzipped) |
 | GitHub-e nirapod shima | ~150,000 item (~45 MB) |
-| Ekhonkar obostha | ~5,000 item/din × 21 din = ~50,000 item, 14 MB |
+| Ekhonkar obostha | ~25,000 item, 8 MB gzipped |
+
+**Retention duibhage:** khobor ar Telegram **14 din** (`retention_days`), ar Mastodon/Reddit/YouTube **4 din** (`social_retention_days`)। Social chatter-i volume-er boro ongsho, ar tar purono itihas kaaj-e lage na — ei bhager karone-i 71-ta Google News feed ar 62-ta outlet rakha somvob hoyeche.
 
 Volume barate chaile `per_run` barao, ar sheই shathe `retention_days` komao — na hole ekdin push fail korbe.
 

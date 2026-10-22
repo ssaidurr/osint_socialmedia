@@ -25,7 +25,8 @@ SURFACE = "#0b0d10"
 HEAT = ["#6a3537", "#823f41", "#99494a", "#b15354", "#c95d5e", "#e06767", "#f87171"]
 SENTIMENTS = ["negative", "neutral", "positive"]
 SENTIMENT_SCALE = alt.Scale(domain=SENTIMENTS, range=[NEG, NEU, POS])
-RANGES = {"Last 6 hours": 6, "Last 24 hours": 24, "Last 3 days": 72, "Last 7 days": 168, "Last 30 days": 720}
+# The ranges stop where the data does — see retention_days in config.yaml
+RANGES = {"Last 6 hours": 6, "Last 24 hours": 24, "Last 3 days": 72, "Last 7 days": 168, "Last 14 days": 336}
 
 st.set_page_config(page_title="News Monitor", page_icon="📡", layout="wide")
 cfg = load_config()

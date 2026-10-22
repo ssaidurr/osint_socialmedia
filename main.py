@@ -120,8 +120,9 @@ def run(conn, cfg, dry_run: bool) -> None:
         mail = digest_module.send_daily(conn, cfg, dry_run)
         print(f"── daily brief email: {'sent' if mail['sent'] else mail['reason']}")
     if days := cfg.get("retention_days"):
-        if n := db.prune(conn, days):
-            print(f"── pruned {n} items collected more than {days} days ago")
+        social = cfg.get("social_retention_days")
+        if n := db.prune(conn, days, social):
+            print(f"── pruned {n} items (news older than {days}d, social older than {social or days}d)")
 
 
 def report(conn, cfg, hours: float) -> None:

@@ -164,10 +164,26 @@ def seconds_since(iso_time: str) -> float:
     return (datetime.now(timezone.utc) - datetime.fromisoformat(iso_time)).total_seconds()
 
 
-def prune(conn: sqlite3.Connection, days: float) -> int:
-    """Delete items collected more than `days` ago and compact the file (keeps the pushed database small).
-    Uses collection time, not publish time, so old articles still sitting in a feed aren't re-added every run."""
-    n = conn.execute("DELETE FROM items WHERE collected_at < ?", (hours_ago(days * 24),)).rowcount
+SOCIAL_TYPES = ("mastodon_post", "reddit_post", "reddit_comment", "youtube_comment", "youtube_video")
+
+
+def prune(conn: sqlite3.Connection, days: float, social_days: float | None = None) -> int:
+    """Drop what has aged out, then compact the file.
+
+    The published database lives in a git branch, so its size is a hard constraint. Social chatter
+    is most of the volume and the least worth keeping — it gets a shorter window than the news,
+    which is what people actually look back through. Collection time is used rather than publish
+    time, so an old article still sitting in a feed is not re-added every run."""
+    placeholders = ",".join("?" * len(SOCIAL_TYPES))
+    n = conn.execute(
+        f"DELETE FROM items WHERE collected_at < ? AND source_type NOT IN ({placeholders})",
+        (hours_ago(days * 24), *SOCIAL_TYPES),
+    ).rowcount
+    if social_days:
+        n += conn.execute(
+            f"DELETE FROM items WHERE collected_at < ? AND source_type IN ({placeholders})",
+            (hours_ago(social_days * 24), *SOCIAL_TYPES),
+        ).rowcount
     conn.commit()
     if n:
         conn.execute("VACUUM")
