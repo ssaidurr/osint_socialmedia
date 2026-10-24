@@ -1,0 +1,235 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<style>
+  html, body { margin: 0; padding: 0; background: transparent; overflow: hidden;
+               font-family: "Geist", system-ui, -apple-system, sans-serif; }
+  #globe { width: 100%; cursor: grab; }
+  #globe:active { cursor: grabbing; }
+  #tip {
+    position: absolute; pointer-events: none; opacity: 0; transform: translate(-50%, -140%);
+    background: #0b0d10ee; border: 1px solid #262c34; border-radius: 10px; padding: .5rem .65rem;
+    color: #eceef1; font-size: .78rem; line-height: 1.45; white-space: nowrap;
+    box-shadow: 0 18px 34px -24px #000; transition: opacity .15s ease; z-index: 5;
+  }
+  #tip .n { font-family: "Geist Mono", ui-monospace, monospace; }
+  #tip .dim { color: #8a919c; }
+  #hint {
+    position: absolute; left: 14px; bottom: 12px; color: #8a919c; font-size: .68rem;
+    letter-spacing: .14em; text-transform: uppercase;
+    font-family: "Geist Mono", ui-monospace, monospace; pointer-events: none;
+  }
+  #legend {
+    position: absolute; right: 14px; bottom: 12px; display: flex; align-items: center; gap: .5rem;
+    color: #8a919c; font-size: .68rem; letter-spacing: .12em; text-transform: uppercase;
+    font-family: "Geist Mono", ui-monospace, monospace; pointer-events: none;
+  }
+  #legend .ramp { width: 108px; height: 6px; border-radius: 3px;
+                  background: linear-gradient(90deg, #5ee6ff, #8b7cff, #f87171); }
+  .lbl { font-family: "Geist Mono", ui-monospace, monospace; font-size: 10px;
+         color: #eceef1; text-shadow: 0 1px 6px #000; pointer-events: none; }
+</style>
+</head>
+<body>
+<div id="globe"></div>
+<div id="tip"></div>
+<div id="hint">drag to spin · click a country</div>
+<div id="legend"><span>low</span><span class="ramp"></span><span>negative</span></div>
+
+<script src="https://cdn.jsdelivr.net/npm/globe.gl@2.32.5/dist/globe.gl.min.js"></script>
+<script>
+// ── The Streamlit component protocol, by hand: this is a plain HTML component, so the three
+//    messages it needs are posted to the parent frame directly.
+function post(type, data) {
+  window.parent.postMessage(Object.assign({ isStreamlitMessage: true, type: type }, data), "*");
+}
+const setHeight = h => post("streamlit:setFrameHeight", { height: h });
+const sendValue = v => post("streamlit:setComponentValue", { value: v, dataType: "json" });
+
+const EL = document.getElementById("globe");
+const TIP = document.getElementById("tip");
+let globe = null, outlines = null, byCode = {}, selected = null, dragging = false,
+    hovered = null, lastView = null;
+
+// Cyan for a quiet country, violet in between, red where the news turns negative
+function rampColor(share, weight) {
+  const stops = [[94, 230, 255], [139, 124, 255], [248, 113, 113]];
+  const t = Math.max(0, Math.min(1, (share - 0.35) / 0.45)) * 2;   // 35%–80% negative, end to end
+  const i = Math.min(1, Math.floor(t)), f = t - i;
+  const c = stops[i].map((v, k) => Math.round(v + (stops[i + 1][k] - v) * f));
+  return `rgba(${c[0]},${c[1]},${c[2]},${0.55 + 0.42 * weight})`;
+}
+
+// The biggest ring of a country, averaged — good enough to hang a number over
+function centroid(feature) {
+  const g = feature.geometry;
+  const polys = g.type === "Polygon" ? [g.coordinates] : g.coordinates;
+  let best = null, bestLen = -1;
+  polys.forEach(p => { if (p[0].length > bestLen) { bestLen = p[0].length; best = p[0]; } });
+  const sum = best.reduce((a, p) => [a[0] + p[0], a[1] + p[1]], [0, 0]);
+  return { lng: sum[0] / best.length, lat: sum[1] / best.length };
+}
+
+function paint() {      // data changed: fills and labels both
+  if (!globe || !outlines) return;
+  paintPolygons();
+  paintLabels();
+}
+
+function paintPolygons() {
+  if (!globe || !outlines) return;
+  const top = Object.values(byCode).filter(r => r.total > 0).sort((a, b) => b.total - a.total);
+  const max = top.length ? top[0].total : 1;
+
+  globe
+    .polygonsData(outlines.features)
+    .polygonAltitude(f => (f.properties.iso2 === hovered ? 0.02 : 0.006))
+    .polygonCapColor(f => {
+      const r = byCode[f.properties.iso2];
+      if (f.properties.iso2 === selected) return "rgba(94,230,255,.95)";
+      if (!r || !r.total) return "rgba(18,24,31,.9)";          // a country with no news in range
+      return rampColor(r.share, Math.log(r.total + 1) / Math.log(max + 1));
+    })
+    .polygonSideColor(() => "rgba(94,230,255,.18)")
+    .polygonStrokeColor(f => (f.properties.iso2 === selected ? "#eafcff" : "#05070a"))
+    .polygonsTransitionDuration(260);
+}
+
+function paintLabels() {
+  if (!globe || !outlines) return;
+
+  // Every country is a candidate, loudest first. One is dropped only when it would land on a
+  // label already placed — so the names thin out as you pull away and fill in as you come close.
+  const pov = globe.pointOfView();
+  const wrap = d => ((d + 540) % 360) - 180;   // 179° and -179° are two degrees apart
+  const near = (a, b) => {                      // rough degrees apart, longitude narrowing at the poles
+    const dLat = a.lat - b.lat;
+    const dLng = wrap(a.lng - b.lng) * Math.cos((a.lat + b.lat) * Math.PI / 360);
+    return Math.sqrt(dLat * dLat + dLng * dLng);
+  };
+  const facing = c => near(c, { lat: pov.lat, lng: pov.lng }) < 78;   // the hemisphere in view
+  const gap = 5.2 * pov.altitude;               // the room one label needs, in those same degrees
+
+  const ranked = outlines.features.map(f => {
+    const r = byCode[f.properties.iso2];
+    const c = centroid(f);
+    const total = r ? r.total : 0;
+    return { lat: c.lat, lng: c.lng, total: total, quiet: !total,
+             text: total ? `${f.properties.name}  ${total.toLocaleString()}` : f.properties.name };
+  }).sort((a, b) => b.total - a.total);
+
+  // Labels are wide and short, so the room one needs is an ellipse, not a circle: a long name
+  // like "United Arab Emirates 5" has to keep much further from its neighbour sideways than
+  // it does above or below. Without this, Saudi Arabia and the Emirates print over each other.
+  const halfWidth = c => gap * (0.2 + 0.042 * c.text.length);
+  const vGap = gap * 0.45;
+  const clashes = (a, c) => {
+    const dLat = Math.abs(a.lat - c.lat);
+    const dLng = Math.abs(wrap(a.lng - c.lng) * Math.cos((a.lat + c.lat) * Math.PI / 360));
+    return dLat < vGap && dLng < halfWidth(a) + halfWidth(c);
+  };
+
+  const placed = [];
+  ranked.forEach(c => {
+    if (!facing(c)) return;
+    if (placed.some(p => clashes(p, c))) return;
+    placed.push(c);
+  });
+
+  globe.labelsData(placed.map(c => ({ lat: c.lat, lng: c.lng, text: c.text, quiet: c.quiet })))
+    .labelText("text")
+    .labelSize(Math.max(0.42, Math.min(0.95, pov.altitude * 0.46)))
+    .labelDotRadius(0)
+    .labelColor(d => (d.quiet ? "rgba(236,238,241,.45)" : "rgba(255,255,255,.97)"))
+    .labelResolution(3)
+    .labelAltitude(0.012).labelIncludeDot(false);
+
+  lastView = globe.pointOfView();
+}
+
+function build(height) {
+  globe = Globe()(EL)
+    .width(EL.clientWidth).height(height)
+    .backgroundColor("rgba(0,0,0,0)")
+    .showGlobe(true).showAtmosphere(true)
+    .atmosphereColor("#5ee6ff").atmosphereAltitude(0.17)
+    .onPolygonHover(f => {
+      hovered = f ? f.properties.iso2 : null;
+      globe.polygonAltitude(globe.polygonAltitude());   // re-evaluate, so the hovered one lifts
+      if (!f) { TIP.style.opacity = 0; return; }
+      const p = f.properties, r = byCode[p.iso2];
+      TIP.innerHTML = r && r.total
+        ? `<b>${p.name}</b> <span class="dim">${p.iso2}</span><br>` +
+          `<span class="n">${r.total.toLocaleString()}</span> items · ` +
+          `<span class="n">${Math.round(r.share * 100)}%</span> negative`
+        : `<b>${p.name}</b> <span class="dim">${p.iso2}</span><br><span class="dim">no items in range</span>`;
+      TIP.style.opacity = 1;
+    })
+    .onPolygonClick(f => f && sendValue(f.properties.iso2));
+
+  // Mutate the material globe.gl already made rather than constructing one: the UMD bundle
+  // keeps three.js to itself, so there is no THREE global to build with.
+  const mat = globe.globeMaterial();
+  if (mat && mat.color) { mat.color.set("#070a0e"); mat.shininess = 2; }
+
+  globe.controls().autoRotate = true;
+  globe.controls().autoRotateSpeed = 0.32;
+  globe.controls().enableDamping = true;
+  globe.pointOfView({ lat: 20, lng: 52, altitude: 1.75 });   // opens on the region this monitor watches
+
+  setInterval(() => {
+    if (!globe || !outlines) return;
+    const p = globe.pointOfView();
+    if (!lastView ||
+        Math.abs(p.lng - lastView.lng) > 4 ||
+        Math.abs(p.lat - lastView.lat) > 3 ||
+        Math.abs(p.altitude - lastView.altitude) > 0.04) {
+      paintLabels();                     // the spin counts as movement; the labels follow it
+    }
+  }, 300);
+
+  EL.addEventListener("pointerdown", () => { dragging = true; globe.controls().autoRotate = false; });
+  window.addEventListener("pointerup", () => { dragging = false; });
+  // Leaving the canvas should take the tooltip with it, not leave it parked in a corner
+  EL.addEventListener("pointerleave", () => {
+    TIP.style.opacity = 0;
+    hovered = null;
+    globe.polygonAltitude(globe.polygonAltitude());
+  });
+  EL.addEventListener("pointermove", e => {
+    TIP.style.left = e.clientX + "px";
+    TIP.style.top = e.clientY + "px";
+  });
+  window.addEventListener("resize", () => globe.width(EL.clientWidth));
+}
+
+function render(args) {
+  const height = args.height || 620;
+  TIP.style.opacity = 0;      // a rerun leaves the pointer where it was: do not keep its tooltip
+  hovered = null;
+  byCode = {};
+  (args.rows || []).forEach(r => { byCode[r.iso2] = r; });
+  selected = args.selected || null;
+
+  if (!globe) {
+    build(height);
+    fetch("countries.geojson")
+      .then(r => r.json())
+      .then(geo => { outlines = geo; paint(); })
+      .catch(() => { document.getElementById("hint").textContent = "could not load the country outlines"; });
+  } else {
+    globe.height(height);
+    paint();
+  }
+  setHeight(height);
+}
+
+window.addEventListener("message", e => {
+  if (e.data.type === "streamlit:render") render(e.data.args);
+});
+post("streamlit:componentReady", { apiVersion: 1 });
+setHeight(620);
+</script>
+</body>
+</html>
