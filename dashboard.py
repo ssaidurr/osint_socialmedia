@@ -135,47 +135,6 @@ BRAND = """
   .brand-name { font-size: 1.02rem; font-weight: 500; letter-spacing: -.02em; }
   .brand-dim { color: #8a919c; }
 
-  /* The two drifting glows the SynergyAXN site uses, at a fraction of their opacity: this is a
-     reading surface, so the motion has to stay at the edge of noticing. */
-  .stApp::before {
-    content: ""; position: fixed; inset: -25vmax; z-index: 0; pointer-events: none;
-    background:
-      radial-gradient(38vmax 38vmax at 18% 12%, #5ee6ff30, transparent 60%),
-      radial-gradient(34vmax 34vmax at 82% 76%, #8b7cff2b, transparent 58%);
-    animation: axn-drift 38s ease-in-out infinite alternate;
-  }
-  .stApp > * { position: relative; z-index: 1; }
-  @keyframes axn-drift {
-    from { transform: translate3d(-2%, -1%, 0) scale(1); }
-    to   { transform: translate3d(3%, 2%, 0) scale(1.07); }
-  }
-
-  /* Outlined 2D shapes drifting behind the page. They sit at z-index -1, so they paint under
-     every card — the gutters and the space between sections are where they show. */
-  .axn-shapes { position: fixed; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; }
-  .axn-shapes span { position: absolute; display: block; color: #5ee6ff; }
-  .axn-shapes .violet { color: #8b7cff; }
-  .axn-shapes svg { display: block; }
-  .axn-shapes .s1 { top: 9%;  left: -3.2%;  animation: axn-float-a 31s ease-in-out infinite alternate; }
-  .axn-shapes .s2 { top: 34%; right: -2.6%; animation: axn-float-b 37s ease-in-out infinite alternate; }
-  .axn-shapes .s3 { top: 63%; left: -2.4%;  animation: axn-float-c 44s ease-in-out infinite alternate; }
-  .axn-shapes .s4 { top: 78%; right: -3.4%; animation: axn-float-a 29s ease-in-out infinite alternate 3s; }
-  .axn-shapes .s5 { top: 2%;  right: 14%;   animation: axn-float-c 40s ease-in-out infinite alternate; }
-  .axn-shapes .s6 { bottom: 4%; left: 22%;  animation: axn-float-b 35s ease-in-out infinite alternate 5s; }
-  .axn-shapes .spin  { animation: axn-spin 48s linear infinite; }
-  @keyframes axn-float-a {
-    from { transform: translate3d(0, 0, 0) rotate(-8deg); }
-    to   { transform: translate3d(2.2vw, -4.5vh, 0) rotate(14deg); }
-  }
-  @keyframes axn-float-b {
-    from { transform: translate3d(0, 2vh, 0) rotate(10deg); }
-    to   { transform: translate3d(-2.6vw, -3vh, 0) rotate(-12deg); }
-  }
-  @keyframes axn-float-c {
-    from { transform: translate3d(0, -2vh, 0) scale(1); }
-    to   { transform: translate3d(1.8vw, 3.5vh, 0) scale(1.12); }
-  }
-  @keyframes axn-spin { to { transform: rotate(360deg); } }
 
   /* A live pulse on the collection time — it beats while the data is fresh and goes amber
      when the monitor has not reported in a while. */
@@ -203,11 +162,14 @@ BRAND = """
   [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] > [data-testid="stMetric"]),
   [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] h4),
   [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .axn-head) {
-    background: #0b0d10;
-    border-color: #23272e !important;
-    border-radius: .9rem;
-    padding: 1.1rem 1.25rem;
-    box-shadow: 0 1px 0 0 #ffffff08 inset;
+    background: linear-gradient(180deg, #13171d 0%, #0c0f13 46%, #0a0c10 100%);
+    border-color: #262c34 !important;
+    border-radius: 1rem;
+    padding: 1.2rem 1.35rem;
+    box-shadow:
+      0 1px 0 0 #ffffff14 inset,      /* the lit top edge: where the light would fall */
+      0 18px 34px -28px #000000e6,    /* contact shadow, close under the panel */
+      0 44px 80px -60px #000;         /* and the soft one that lifts it off the page */
   }
 
   /* Section titles in the site's own micro-label: Geist Mono, uppercase, wide-tracked, muted,
@@ -265,33 +227,54 @@ BRAND = """
      towards the pointer, and take one cyan sweep along their top edge. Everything here
      is keyed off `.axn-motion`, a class the companion script sets on <html> — so if the
      script never runs, nothing is hidden and the page just sits still. */
+  @property --axn-angle { syntax: "<angle>"; initial-value: 0deg; inherits: false; }
+
   .axn-card { position: relative; }
   .axn-motion .axn-card {
-    transform: perspective(1100px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg))
+    transform: perspective(1000px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg))
                translate3d(0, var(--ty, 0px), 0);
     transition: transform .4s cubic-bezier(.2, .7, .2, 1) var(--d, 0ms),
-                opacity .55s ease var(--d, 0ms), box-shadow .4s ease, border-color .4s ease;
+                opacity .6s ease var(--d, 0ms), box-shadow .4s ease, border-color .4s ease;
   }
   .axn-motion .axn-card:hover { will-change: transform; }
-  .axn-motion .axn-card:not(.axn-in) { opacity: 0; --ty: 24px; }
+  /* Panels arrive tipped away from the reader and swing level */
+  .axn-motion .axn-card:not(.axn-in) { opacity: 0; --ty: 26px; --rx: 7deg; }
   .axn-motion .axn-card.axn-in { opacity: 1; }
   .axn-motion .axn-card:hover {
-    --ty: -3px;
-    border-color: #2f3a42 !important;
-    box-shadow: 0 24px 48px -30px #000, 0 0 0 1px #5ee6ff1c;
+    --ty: -4px;
+    border-color: #34505d !important;
+    box-shadow:
+      0 1px 0 0 #ffffff1f inset,
+      0 28px 52px -30px #000,
+      0 0 70px -34px #5ee6ff66;      /* the panel throws a little of its own light */
+  }
+
+  /* Two lights live in the 1px band between a panel's edge and its content. The mask knocks
+     the middle out, so neither of them can ever land on something being read: one follows the
+     pointer across the edge, the other runs a lap around it while the pointer is on the panel. */
+  .axn-card::before, .axn-card::after {
+    content: ""; position: absolute; inset: -1px; border-radius: inherit; padding: 1px;
+    pointer-events: none; opacity: 0; transition: opacity .35s ease;
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    mask-composite: exclude;
+  }
+  .axn-card::before {
+    background: radial-gradient(260px circle at var(--mx, 50%) var(--my, 50%), #5ee6ff, transparent 55%);
   }
   .axn-card::after {
-    content: ""; position: absolute; left: 0; right: 0; top: 0; height: 1px; opacity: 0;
-    background: linear-gradient(90deg, #5ee6ff00 0%, #5ee6ffaa 50%, #5ee6ff00 100%);
-    background-size: 45% 100%; background-repeat: no-repeat; background-position: -60% 0;
-    border-radius: .9rem .9rem 0 0; pointer-events: none;
+    background: conic-gradient(from var(--axn-angle), transparent 58%, #5ee6ff 76%,
+                               #8b7cff 88%, transparent 97%);
+    animation: axn-orbit 4.5s linear infinite paused;   /* only burns a frame while hovered */
   }
-  .axn-card.axn-in::after { animation: axn-sheen 1.5s ease .12s both; }
-  @keyframes axn-sheen {
-    0%   { background-position: -60% 0; opacity: 0; }
-    18%  { opacity: 1; }
-    100% { background-position: 160% 0; opacity: 0; }
-  }
+  .axn-motion .axn-card:hover::before { opacity: .85; }
+  .axn-motion .axn-card:hover::after { opacity: .7; animation-play-state: running; }
+  @keyframes axn-orbit { to { --axn-angle: 360deg; } }
+
+  /* The title lifts with the panel */
+  .axn-motion .axn-card:hover [data-testid="stHeading"] h3,
+  .axn-motion .axn-card:hover .axn-label { color: #c6ccd4; transition: color .35s ease; }
 
   /* Each event slides in behind the one above it, so the feed reads as a feed. */
   .axn-stream .row { animation: axn-row-in .5s cubic-bezier(.2, .8, .2, 1) both; border-radius: 7px; }
@@ -310,30 +293,12 @@ BRAND = """
 
   /* Anyone who asks their system for less motion gets none of it. */
   @media (prefers-reduced-motion: reduce) {
-    .stApp::before { animation: none; }
-    .axn-shapes span, .axn-shapes .spin, .axn-shapes .trace { animation: none; }
-    .axn-stream .row, .axn-bars .fill, .axn-index, .axn-card.axn-in::after { animation: none; }
+    .axn-stream .row, .axn-bars .fill, .axn-index { animation: none; }
+    .axn-card::after { animation: none; }
     .axn-motion .axn-card { transition: none; transform: none; opacity: 1; }
     .live-dot::after { animation: none; opacity: .35; }
   }
 </style>
-<div class="axn-shapes" aria-hidden="true">
-  <span class="s1"><svg width="150" height="150" viewBox="0 0 150 150" fill="none">
-    <circle cx="75" cy="75" r="62" stroke="currentColor" stroke-opacity=".40"/>
-    <circle cx="75" cy="75" r="40" stroke="currentColor" stroke-opacity=".34"/></svg></span>
-  <span class="s2 violet"><svg width="160" height="140" viewBox="0 0 160 140" fill="none">
-    <path d="M80 10 L148 128 H12 Z" stroke="currentColor" stroke-opacity=".38" stroke-linejoin="round"/></svg></span>
-  <span class="s3"><svg width="140" height="156" viewBox="0 0 140 156" fill="none">
-    <path d="M70 4 L132 40 V116 L70 152 L8 116 V40 Z" stroke="currentColor" stroke-opacity=".36" stroke-linejoin="round"/></svg></span>
-  <span class="s4"><svg class="spin" width="164" height="164" viewBox="0 0 164 164" fill="none">
-    <circle cx="82" cy="82" r="68" stroke="currentColor" stroke-opacity=".44"
-            stroke-dasharray="26 18"/></svg></span>
-  <span class="s5 violet"><svg width="96" height="96" viewBox="0 0 96 96" fill="none">
-    <rect x="10" y="10" width="76" height="76" rx="12" stroke="currentColor" stroke-opacity=".32"/></svg></span>
-  <span class="s6"><svg width="110" height="110" viewBox="0 0 110 110" fill="none">
-    <circle cx="55" cy="55" r="46" stroke="currentColor" stroke-opacity=".34" stroke-dasharray="4 14"/>
-    <circle cx="55" cy="55" r="3" fill="currentColor" fill-opacity=".45"/></svg></span>
-</div>
 <div class="brand">
   <svg width="22" height="22" viewBox="0 0 32 32" fill="none" aria-hidden="true">
     <circle cx="16" cy="16" r="14.5" stroke="currentColor" stroke-opacity="0.35"></circle>
@@ -799,8 +764,7 @@ components.html("""
   let active = null, rect = null, queued = false, mx = 0, my = 0;
   function clear() {
     if (!active) return;
-    active.style.removeProperty("--rx");
-    active.style.removeProperty("--ry");
+    ["--rx", "--ry", "--mx", "--my"].forEach(function (v) { active.style.removeProperty(v); });
     active = null; rect = null;
   }
   doc.addEventListener("pointermove", function (e) {
@@ -817,10 +781,12 @@ components.html("""
     window.parent.requestAnimationFrame(function () {
       queued = false;
       if (!active || !rect) return;
-      const x = (mx - rect.left) / rect.width - 0.5;
-      const y = (my - rect.top) / rect.height - 0.5;
-      active.style.setProperty("--ry", (x * 2.4).toFixed(2) + "deg");
-      active.style.setProperty("--rx", (-y * 1.8).toFixed(2) + "deg");
+      const px = (mx - rect.left) / rect.width, py = (my - rect.top) / rect.height;
+      active.style.setProperty("--ry", ((px - 0.5) * 3.4).toFixed(2) + "deg");
+      active.style.setProperty("--rx", ((0.5 - py) * 2.6).toFixed(2) + "deg");
+      // where the edge light sits, so it tracks the pointer along the border
+      active.style.setProperty("--mx", (px * 100).toFixed(1) + "%");
+      active.style.setProperty("--my", (py * 100).toFixed(1) + "%");
     });
   }, { passive: true });
   (scroller || doc).addEventListener("scroll", clear, { passive: true });   // a cached rect goes stale on scroll
