@@ -90,7 +90,7 @@ def check_and_alert(conn, cfg: dict, dry_run: bool = False) -> dict:
 def create_ticket(conn, cfg: dict, stats: dict, dry_run: bool) -> dict:
     a = cfg["alert"]
     created = db.now_utc()
-    ticket_id = f"OSINT-{datetime.now(timezone.utc):%Y%m%d-%H%M}-{secrets.token_hex(2).upper()}"
+    ticket_id = f"SAXN-{datetime.now(timezone.utc):%Y%m%d-%H%M}-{secrets.token_hex(2).upper()}"
     items = db.top_negative(conn, stats["since"], a.get("top_items_in_email", 10))
     ticket = {
         "id": ticket_id, "created_at": created, "window_hours": a["window_hours"],
@@ -148,7 +148,7 @@ def send_email(recipients: list[str], subject: str, text_body: str, html_body: s
 def render_email(cfg: dict, ticket: dict, stats: dict, items: list[dict]) -> tuple[str, str, str]:
     level, ratio = ticket["level"], stats["ratio"]
     window = f"last {ticket['window_hours']:g}h"
-    subject = (f"[OSINT ALERT][{level}] Negative news {ratio:.0%} "
+    subject = (f"[AXN PULSE][{level}] Negative news {ratio:.0%} "
                f"({stats['negative']}/{stats['total']}) — {window} — {ticket['id']}")
     created = to_local(ticket["created_at"], cfg)
     cats = sorted(stats["categories"].items(), key=lambda kv: -kv[1])
@@ -209,7 +209,7 @@ def render_email(cfg: dict, ticket: dict, stats: dict, items: list[dict]) -> tup
         for it in items)
     html_body = f"""<div style="font-family:-apple-system,Segoe UI,Roboto,'Noto Sans Bengali',sans-serif;max-width:680px;color:#101828;background:#ffffff;padding:20px;border-radius:10px">
 <div style="border-left:6px solid {level_color};padding:12px 16px;background:#fff6f5">
-  <div style="font-size:12px;color:#667085">OSINT Social Media Monitor · Ticket</div>
+  <div style="font-size:12px;color:#667085">AXN Pulse · News Monitor · Ticket</div>
   <div style="font-size:20px;font-weight:700">{e(ticket['id'])} <span style="color:{level_color}">[{level}]</span></div>
   <div style="font-size:13px;color:#475467">{e(created)} · {window}</div>
 </div>
@@ -228,6 +228,6 @@ average severity <b>{stats['avg_severity']:.1f}/5</b>.{baseline_note}</p>
 
 def send_test_email(cfg: dict) -> None:
     recipients = cfg["alert"]["recipients"]
-    send_email(recipients, "[OSINT] Test email — SMTP is working",
-               "This is a test from the OSINT Social Media Monitor. Alerts will arrive like this.",
-               "<p>This is a test from the <b>OSINT Social Media Monitor</b>. Alerts will arrive like this.</p>")
+    send_email(recipients, "[AXN Pulse] Test email — SMTP is working",
+               "This is a test from AXN Pulse. Alerts will arrive like this.",
+               "<p>This is a test from <b>AXN Pulse</b>. Alerts will arrive like this.</p>")

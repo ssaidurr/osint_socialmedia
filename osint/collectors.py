@@ -17,7 +17,7 @@ from .db import get_state, now_utc, set_state
 
 log = logging.getLogger(__name__)
 
-HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; osint-socialmedia-monitor/1.0)"}
+HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; axn-pulse-news-monitor/1.0)"}
 TAG_RE = re.compile(r"<[^>]+>")
 YT_API = "https://www.googleapis.com/youtube/v3"
 

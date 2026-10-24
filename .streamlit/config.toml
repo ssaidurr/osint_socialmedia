@@ -22,4 +22,4 @@ codeFont = "Geist Mono:https://fonts.googleapis.com/css2?family=Geist+Mono&displ
 # Chart colours come from the same palette. Sequential ramps start bright enough to stay
 # visible on the near-black surface (the faintest step still clears 2:1).
 chartCategoricalColors = ["#5ee6ff", "#8b7cff", "#f87171", "#4ade80", "#8a919c", "#ffd236"]
-chartSequentialColors = ["#224a53", "#2a5e68", "#31717e", "#388494", "#4098a9", "#48acbe", "#4fbfd4", "#56d2ea", "#5ee6ff"]
+chartSequentialColors = ["#1d3f47", "#224a53", "#2a5e68", "#31717e", "#388494", "#4098a9", "#48acbe", "#4fbfd4", "#56d2ea", "#5ee6ff"]

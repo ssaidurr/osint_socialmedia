@@ -1,4 +1,4 @@
-name: OSINT monitor
+name: AXN Pulse monitor
 
 on:
   schedule:

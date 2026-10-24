@@ -1,4 +1,4 @@
-# ─── OSINT Social Media Monitor — configuration ───────────────────────────────
+# ─── AXN Pulse — news monitor configuration ───────────────────────────────────
 # Secrets (API key, SMTP password) go in .env, not here.
 
 timezone: Asia/Dhaka          # used for display in emails and the dashboard

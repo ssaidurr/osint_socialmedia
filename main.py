@@ -1,4 +1,4 @@
-"""OSINT Social Media Monitor — command line.
+"""AXN Pulse — news monitor command line.
 
     python main.py run            collect + analyze + check threshold (+ email ticket)
     python main.py run --dry-run  same, but never send email
@@ -157,7 +157,7 @@ def report(conn, cfg, hours: float) -> None:
 
 
 def main() -> None:
-    p = argparse.ArgumentParser(description="OSINT social media & news monitor")
+    p = argparse.ArgumentParser(description="AXN Pulse — social media & news monitor")
     p.add_argument("--config", help="path to config.yaml")
     p.add_argument("-v", "--verbose", action="store_true")
     sub = p.add_subparsers(dest="cmd", required=True)

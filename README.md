@@ -1,4 +1,4 @@
-# OSINT Social Media & News Monitor
+# AXN Pulse — Social Media & News Monitor
 
 Public news o social media theke data collect kore, sentiment analysis kore, negative news-er **type** analytics dey. Negative news beshi hoye gele automatically ekta **ticket** banay ar email kore pathay (default: `ffoisall@gmail.com`).
 
@@ -273,7 +273,7 @@ cd "/Users/macmini/Documents/coding Project/osint_socialmedia"
 git init -b main
 git add .
 git status          # check korun: .env, .venv/, data/ jeno list-e NA thake
-git commit -m "OSINT monitor"
+git commit -m "AXN Pulse monitor"
 git remote add origin https://github.com/<apnar-username>/osint_socialmedia.git
 git push -u origin main
 ```
@@ -292,7 +292,7 @@ Repo → **Settings → Secrets and variables → Actions → New repository sec
 
 ### 3. Prothom run
 
-Repo → **Actions** tab → **OSINT monitor** → **Run workflow**. 1–2 minute por sobuj ✓ hole kaaj korche. Log-e `provider: gemini` dekhun. Er por theke protiti ghontay nije theke chalbe. Fail korle GitHub apnake email korbe.
+Repo → **Actions** tab → **AXN Pulse monitor** → **Run workflow**. 1–2 minute por sobuj ✓ hole kaaj korche. Log-e `provider: gemini` dekhun. Er por theke protiti ghontay nije theke chalbe. Fail korle GitHub apnake email korbe.
 
 - **Public repo** hole `monitor.yml`-e `cron: "*/30 * * * *"` dite paren (30 min por por). **Private repo**-te mashe free minute limit ache, tai hourly-i rakhun.
 - GitHub-e chalano shuru korle nijer computer-er cron/`watch` bondho korun. Na hole duita alada database hobe, ar email duibar ashte pare.

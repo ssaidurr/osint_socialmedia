@@ -154,10 +154,11 @@ def require_access(cfg: dict) -> dict | None:
     conf = cfg.get("demo_access") or {}
     if not conf.get("enabled", True):
         return None                            # the gate is switched off in config.yaml
+    if os.getenv("DEMO_OPEN") == "1":
+        return None                            # working on it locally, deliberately
+
     sheet_id = _secret("gsheet_id")
     if not sheet_id:
-        if os.getenv("DEMO_OPEN") == "1":
-            return None                        # working on it locally, deliberately
         if conf.get("require", True):
             # Fail closed: a misconfigured deployment must not hand the demo to everyone
             st.error("Demo access is switched on but not configured — this app needs `gsheet_id` "
