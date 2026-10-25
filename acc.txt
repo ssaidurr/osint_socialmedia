@@ -1,0 +1,2 @@
+cd "/Users/macmini/Documents/coding Project/osint_socialmedia"
+.venv/bin/streamlit run dashboard.py

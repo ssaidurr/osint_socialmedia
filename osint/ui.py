@@ -217,6 +217,11 @@ BRAND = """
   .axn-stream .score.neu { background: #8a919c1f; color: #8a919c; }
   .axn-stream .head { color: #eceef1; font-size: .9rem; line-height: 1.35; }
 
+  .axn-context { display: flex; flex-wrap: wrap; gap: .4rem; margin: 0 0 .9rem; }
+  .axn-context .chip {
+    font-family: "Geist Mono", ui-monospace, monospace; font-size: .68rem; color: #a9b0ba;
+    border: 1px solid #262c34; border-radius: 999px; padding: .22rem .6rem; background: #11141a;
+  }
   .axn-stats { display: flex; gap: 1.8rem; margin: .2rem 0 1rem; }
   .axn-stats .axn-label { display: block; margin-bottom: .15rem; }
   .axn-stats .v { display: block; font-family: "Geist Mono", ui-monospace, monospace;

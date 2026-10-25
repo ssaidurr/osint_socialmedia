@@ -27,6 +27,15 @@
   }
   #legend .ramp { width: 108px; height: 6px; border-radius: 3px;
                   background: linear-gradient(90deg, #5ee6ff, #8b7cff, #f87171); }
+  #keys {
+    position: absolute; left: 14px; top: 12px; display: flex; flex-direction: column; gap: .34rem;
+    font-family: "Geist Mono", ui-monospace, monospace; font-size: .68rem; letter-spacing: .08em;
+    text-transform: uppercase; color: #a9b0ba; pointer-events: none;
+    background: #0b0d10c7; border: 1px solid #22272f; border-radius: 10px;
+    padding: .55rem .7rem; backdrop-filter: blur(3px);
+  }
+  #keys div { display: flex; align-items: center; gap: .45rem; }
+  #keys i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
   .lbl { font-family: "Geist Mono", ui-monospace, monospace; font-size: 10px;
          color: #eceef1; text-shadow: 0 1px 6px #000; pointer-events: none; }
 </style>
@@ -35,7 +44,10 @@
 <div id="globe"></div>
 <div id="tip"></div>
 <div id="hint">drag to spin · click a country</div>
-<div id="legend"><span>low</span><span class="ramp"></span><span>negative</span></div>
+<div id="legend">
+  <span>low</span><span class="ramp"></span><span>negative</span>
+</div>
+<div id="keys"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/globe.gl@2.32.5/dist/globe.gl.min.js"></script>
 <script>
@@ -50,15 +62,17 @@ const sendValue = v => post("streamlit:setComponentValue", { value: v, dataType:
 const EL = document.getElementById("globe");
 const TIP = document.getElementById("tip");
 let globe = null, outlines = null, byCode = {}, selected = null, dragging = false,
-    hovered = null, lastView = null;
+    hovered = null, lastView = null, markers = [], night = null, dim = false,
+    hoveredPoint = null;
 
 // Cyan for a quiet country, violet in between, red where the news turns negative
-function rampColor(share, weight) {
+function rampColor(share, weight) {   // dim when markers are drawn over it
   const stops = [[94, 230, 255], [139, 124, 255], [248, 113, 113]];
   const t = Math.max(0, Math.min(1, (share - 0.35) / 0.45)) * 2;   // 35%–80% negative, end to end
   const i = Math.min(1, Math.floor(t)), f = t - i;
   const c = stops[i].map((v, k) => Math.round(v + (stops[i + 1][k] - v) * f));
-  return `rgba(${c[0]},${c[1]},${c[2]},${0.55 + 0.42 * weight})`;
+  const a = dim ? 0.2 + 0.3 * weight : 0.55 + 0.42 * weight;
+  return `rgba(${c[0]},${c[1]},${c[2]},${a})`;
 }
 
 // The biggest ring of a country, averaged — good enough to hang a number over
@@ -75,6 +89,7 @@ function paint() {      // data changed: fills and labels both
   if (!globe || !outlines) return;
   paintPolygons();
   paintLabels();
+  paintMarkers();
 }
 
 function paintPolygons() {
@@ -82,18 +97,80 @@ function paintPolygons() {
   const top = Object.values(byCode).filter(r => r.total > 0).sort((a, b) => b.total - a.total);
   const max = top.length ? top[0].total : 1;
 
+  const shapes = night ? outlines.features.concat([night]) : outlines.features;
   globe
-    .polygonsData(outlines.features)
-    .polygonAltitude(f => (f.properties.iso2 === hovered ? 0.02 : 0.006))
+    .polygonsData(shapes)
+    .polygonAltitude(f => (f.properties.night ? 0.0095 : 0.006))
     .polygonCapColor(f => {
+      if (f.properties.night) return "rgba(4,10,20,.22)";    // dusk, not a blackout
       const r = byCode[f.properties.iso2];
       if (f.properties.iso2 === selected) return "rgba(94,230,255,.95)";
       if (!r || !r.total) return "rgba(18,24,31,.9)";          // a country with no news in range
       return rampColor(r.share, Math.log(r.total + 1) / Math.log(max + 1));
     })
-    .polygonSideColor(() => "rgba(94,230,255,.18)")
-    .polygonStrokeColor(f => (f.properties.iso2 === selected ? "#eafcff" : "#05070a"))
+    .polygonSideColor(f => (f.properties.night ? "rgba(0,0,0,0)" : "rgba(94,230,255,.18)"))
+    .polygonStrokeColor(f => (f.properties.night ? "rgba(94,230,255,.2)"
+                              : f.properties.iso2 === selected ? "#eafcff"
+                              : f.properties.iso2 === hovered ? "#5ee6ff" : "#05070a"))
     .polygonsTransitionDuration(260);
+}
+
+function paintMarkers() {
+  if (!globe) return;
+  globe
+    .pointsData(markers)
+    .pointLat("lat").pointLng("lng")
+    .pointAltitude(0.012)
+    .pointRadius(d => d.r)
+    .pointColor(d => d.color)
+    .pointsMerge(false)
+    .pointsTransitionDuration(260)
+    .pointResolution(24)
+    .onPointHover(d => {
+      hoveredPoint = d || null;
+      if (!d) { TIP.style.opacity = 0; return; }
+      const swatch = `<i style="display:inline-block;width:8px;height:8px;border-radius:50%;
+                         background:${d.color};margin-right:.4rem;vertical-align:middle"></i>`;
+      TIP.innerHTML = `${swatch}<b>${d.title}</b>` +
+        (d.kicker ? ` <span class="dim">${d.kicker}</span>` : "") +
+        `<br><span class="dim">${d.layer || ""}</span>` +
+        (d.detail ? `<br>${d.detail}` : "") +
+        (d.ts ? `<br><span class="dim">${d.ts}</span>` : "");
+      TIP.style.opacity = 1;
+    })
+    .onPointClick(d => { if (d && d.pick) sendValue(d.pick); });
+
+  // The key, in the order the layers were handed over
+  const seen = new Map();
+  markers.forEach(d => { if (d.layer && !seen.has(d.layer)) seen.set(d.layer, d.swatch || d.color); });
+  document.getElementById("keys").innerHTML =
+    [...seen].map(([name, color]) => `<div><i style="background:${color}"></i>${name}</div>`).join("");
+
+  // A slow pulse under the ones that matter: a severe story, a red or orange alert
+  globe.ringsData(markers.filter(d => d.pulse))
+    .ringLat("lat").ringLng("lng")
+    .ringColor(d => t => d.color.replace(/[\d.]+\)$/, `${(1 - t) * 0.5})`))
+    .ringMaxRadius(d => d.r * 6)
+    .ringPropagationSpeed(1.1)
+    .ringRepeatPeriod(1500)
+    .ringResolution(40);
+}
+
+// The night side: everything more than 90° from the point the sun is overhead
+function nightPolygon(s) {
+  if (!s) return null;
+  const rad = d => d * Math.PI / 180, deg = r => r * 180 / Math.PI;
+  const lat0 = rad(-s.lat), lng0 = rad(s.lng + 180), d = rad(90);   // the antisolar point
+  const ring = [];
+  for (let i = 0; i <= 96; i++) {
+    const b = 2 * Math.PI * i / 96;
+    const lat = Math.asin(Math.sin(lat0) * Math.cos(d) + Math.cos(lat0) * Math.sin(d) * Math.cos(b));
+    const lng = lng0 + Math.atan2(Math.sin(b) * Math.sin(d) * Math.cos(lat0),
+                                  Math.cos(d) - Math.sin(lat0) * Math.sin(lat));
+    ring.push([((deg(lng) + 540) % 360) - 180, deg(lat)]);
+  }
+  return { type: "Feature", properties: { night: true, name: "night" },
+           geometry: { type: "Polygon", coordinates: [ring] } };
 }
 
 function paintLabels() {
@@ -155,7 +232,9 @@ function build(height) {
     .showGlobe(true).showAtmosphere(true)
     .atmosphereColor("#5ee6ff").atmosphereAltitude(0.17)
     .onPolygonHover(f => {
+      if (f && f.properties.night) f = null;     // the night side is scenery, not a target
       hovered = f ? f.properties.iso2 : null;
+      if (hoveredPoint) return;                  // a dot under the pointer owns the tooltip
       globe.polygonAltitude(globe.polygonAltitude());   // re-evaluate, so the hovered one lifts
       if (!f) { TIP.style.opacity = 0; return; }
       const p = f.properties, r = byCode[p.iso2];
@@ -166,7 +245,12 @@ function build(height) {
         : `<b>${p.name}</b> <span class="dim">${p.iso2}</span><br><span class="dim">no items in range</span>`;
       TIP.style.opacity = 1;
     })
-    .onPolygonClick(f => f && sendValue(f.properties.iso2));
+    .onPolygonClick(f => {
+      // The dot and the country under it are separate layers and both get the click; whichever
+      // answered last would win. A dot under the pointer takes it.
+      if (hoveredPoint) return;
+      if (f && f.properties.iso2) sendValue(f.properties.iso2);
+    });
 
   // Mutate the material globe.gl already made rather than constructing one: the UMD bundle
   // keeps three.js to itself, so there is no THREE global to build with.
@@ -198,8 +282,13 @@ function build(height) {
     globe.polygonAltitude(globe.polygonAltitude());
   });
   EL.addEventListener("pointermove", e => {
-    TIP.style.left = e.clientX + "px";
-    TIP.style.top = e.clientY + "px";
+    // The tooltip is anchored above the pointer; hold it inside the frame so an edge of the
+    // globe does not cut it in half.
+    const w = TIP.offsetWidth || 220, h = TIP.offsetHeight || 60;
+    const x = Math.min(Math.max(e.clientX, w / 2 + 8), window.innerWidth - w / 2 - 8);
+    const y = Math.min(Math.max(e.clientY, h + 14), window.innerHeight - 8);
+    TIP.style.left = x + "px";
+    TIP.style.top = y + "px";
   });
   window.addEventListener("resize", () => globe.width(EL.clientWidth));
 }
@@ -211,6 +300,9 @@ function render(args) {
   byCode = {};
   (args.rows || []).forEach(r => { byCode[r.iso2] = r; });
   selected = args.selected || null;
+  markers = args.markers || [];
+  dim = !!args.dim;
+  night = nightPolygon(args.sun || null);
 
   if (!globe) {
     build(height);
