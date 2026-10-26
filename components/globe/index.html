@@ -6,6 +6,9 @@
   html, body { margin: 0; padding: 0; background: transparent; overflow: hidden;
                font-family: "Geist", system-ui, -apple-system, sans-serif; }
   #globe { width: 100%; cursor: grab; }
+  #flat { width: 100%; display: none; cursor: grab; touch-action: none; }
+  #flat.on { display: block; }
+  #flat:active { cursor: grabbing; }
   #globe:active { cursor: grabbing; }
   #tip {
     position: absolute; pointer-events: none; opacity: 0; transform: translate(-50%, -140%);
@@ -35,6 +38,32 @@
     padding: .55rem .7rem; backdrop-filter: blur(3px);
   }
   #keys div { display: flex; align-items: center; gap: .45rem; }
+  #clock {
+    position: absolute; left: 14px; bottom: 74px; display: none; align-items: center; gap: .45rem;
+    font-family: "Geist Mono", ui-monospace, monospace; font-size: .68rem; letter-spacing: .1em;
+    text-transform: uppercase; color: #eceef1; pointer-events: none;
+    background: #0b0d10c7; border: 1px solid #22272f; border-radius: 999px; padding: .3rem .7rem;
+  }
+  #clock b { color: #5ee6ff; font-weight: 500; }
+  #modes { position: absolute; left: 14px; bottom: 36px; display: flex; gap: .4rem; }
+  #credit {
+    position: absolute; right: 14px; bottom: 36px; display: none; pointer-events: none;
+    font-size: .62rem; color: #8a919c; background: #0b0d10a8; border-radius: 6px; padding: .2rem .5rem;
+  }
+  #modes .group {
+    display: flex; background: #0b0d10d9; border: 1px solid #22272f; border-radius: 999px;
+    padding: 2px; backdrop-filter: blur(3px);
+  }
+  #modes button {
+    font-family: "Geist Mono", ui-monospace, monospace; font-size: .66rem; letter-spacing: .1em;
+    color: #8a919c; background: none; border: 0; border-radius: 999px; padding: .28rem .66rem;
+    cursor: pointer; transition: background .2s ease, color .2s ease;
+  }
+  #modes button:hover { color: #eceef1; }
+  #modes button.on { background: #5ee6ff1f; color: #5ee6ff; }
+  #clock i { width: 7px; height: 7px; border-radius: 50%; background: #5ee6ff; display: inline-block;
+             animation: axn-beat 1.6s ease-in-out infinite; }
+  @keyframes axn-beat { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
   #keys i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
   .lbl { font-family: "Geist Mono", ui-monospace, monospace; font-size: 10px;
          color: #eceef1; text-shadow: 0 1px 6px #000; pointer-events: none; }
@@ -42,14 +71,21 @@
 </head>
 <body>
 <div id="globe"></div>
+<canvas id="flat"></canvas>
 <div id="tip"></div>
 <div id="hint">drag to spin · click a country</div>
 <div id="legend">
   <span>low</span><span class="ramp"></span><span>negative</span>
 </div>
 <div id="keys"></div>
+<div id="clock"></div>
+<div id="credit">Imagery © Esri, Maxar, Earthstar Geographics</div>
+<div id="modes">
+  <span class="group"><button data-view="3d" class="on">3D</button><button data-view="2d">2D</button></span>
+  <span class="group"><button data-surface="map" class="on">MAP</button><button data-surface="sat">SAT</button></span>
+</div>
 
-<script src="https://cdn.jsdelivr.net/npm/globe.gl@2.32.5/dist/globe.gl.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/globe.gl@2.46.2/dist/globe.gl.min.js"></script>
 <script>
 // ── The Streamlit component protocol, by hand: this is a plain HTML component, so the three
 //    messages it needs are posted to the parent frame directly.
@@ -63,7 +99,9 @@ const EL = document.getElementById("globe");
 const TIP = document.getElementById("tip");
 let globe = null, outlines = null, byCode = {}, selected = null, dragging = false,
     hovered = null, lastView = null, markers = [], night = null, dim = false,
-    hoveredPoint = null;
+    hoveredPoint = null, panelHeight = 620, spinning = true, loop = [], loopAt = 0, loopTimer = null, loopKey = "",
+    weatherOn = false, view = "3d", surfaceMode = "map", basemap = null, baseImage = null,
+    flatView = { zoom: 1, x: 0, y: -40 }, flatHover = null;
 
 // Cyan for a quiet country, violet in between, red where the news turns negative
 function rampColor(share, weight) {   // dim when markers are drawn over it
@@ -71,7 +109,10 @@ function rampColor(share, weight) {   // dim when markers are drawn over it
   const t = Math.max(0, Math.min(1, (share - 0.35) / 0.45)) * 2;   // 35%–80% negative, end to end
   const i = Math.min(1, Math.floor(t)), f = t - i;
   const c = stops[i].map((v, k) => Math.round(v + (stops[i + 1][k] - v) * f));
-  const a = dim ? 0.2 + 0.3 * weight : 0.55 + 0.42 * weight;
+  const overImagery = weatherOn || surfaceMode === "sat";
+  const a = overImagery ? 0.08 + 0.2 * weight     // let the ground through
+          : dim         ? 0.2 + 0.3 * weight
+                        : 0.55 + 0.42 * weight;
   return `rgba(${c[0]},${c[1]},${c[2]},${a})`;
 }
 
@@ -90,6 +131,7 @@ function paint() {      // data changed: fills and labels both
   paintPolygons();
   paintLabels();
   paintMarkers();
+  drawFlat();
 }
 
 function paintPolygons() {
@@ -103,16 +145,376 @@ function paintPolygons() {
     .polygonAltitude(f => (f.properties.night ? 0.0095 : 0.006))
     .polygonCapColor(f => {
       if (f.properties.night) return "rgba(4,10,20,.22)";    // dusk, not a blackout
+      if (surfaceMode === "sat" && !weatherOn) {
+        // Imagery is the point of this view; a colour wash over it is not.
+        return f.properties.iso2 === selected ? "rgba(94,230,255,.3)" : "rgba(0,0,0,0)";
+      }
       const r = byCode[f.properties.iso2];
       if (f.properties.iso2 === selected) return "rgba(94,230,255,.95)";
-      if (!r || !r.total) return "rgba(18,24,31,.9)";          // a country with no news in range
+      if (!r || !r.total) {                                   // a country with no news in range
+        return (weatherOn || surfaceMode === "sat") ? "rgba(18,24,31,.1)" : "rgba(18,24,31,.9)";
+      }
       return rampColor(r.share, Math.log(r.total + 1) / Math.log(max + 1));
     })
     .polygonSideColor(f => (f.properties.night ? "rgba(0,0,0,0)" : "rgba(94,230,255,.18)"))
     .polygonStrokeColor(f => (f.properties.night ? "rgba(94,230,255,.2)"
                               : f.properties.iso2 === selected ? "#eafcff"
-                              : f.properties.iso2 === hovered ? "#5ee6ff" : "#05070a"))
+                              : f.properties.iso2 === hovered ? "#5ee6ff"
+                              : (surfaceMode === "sat" && !weatherOn) ? "rgba(255,255,255,.32)"
+                              : weatherOn ? "#0a0f16" : "#05070a"))
     .polygonsTransitionDuration(260);
+}
+
+function runLoop(weather) {
+  if (!globe) return;
+  const key = (weather || []).map(f => f.url).join("|");
+  if (key === loopKey) return;                 // same loop, leave it running
+  loopKey = key;
+  clearInterval(loopTimer);
+  loop = weather || [];
+  const clock = document.getElementById("clock");
+
+  if (!loop.length) {                           // layer switched off: back to the bare sphere
+    globe.globeImageUrl(null);
+    clock.style.display = "none";
+    return;
+  }
+
+  // Load every step before showing any of them, so the loop does not stutter on first pass
+  Promise.all(loop.map(f => new Promise(done => {
+    const img = new Image();
+    img.onload = img.onerror = () => done();
+    img.src = f.url;
+  }))).then(() => {
+    loopAt = loop.length - 1;
+    const show = () => {
+      const step = loop[loopAt];
+      globe.globeImageUrl(step.url);
+      baseImage = new Image();
+      baseImage.onload = () => drawFlat();
+      baseImage.src = step.url;
+      clock.innerHTML = `<i></i><b>${step.label}</b>`;
+      clock.style.display = loop.length > 1 || step.label ? "flex" : "none";
+      loopAt = (loopAt + 1) % loop.length;
+    };
+    show();
+    if (loop.length > 1) loopTimer = setInterval(show, 650);
+  });
+}
+
+// ── The 2D view ───────────────────────────────────────────────────────────────
+// globe.gl has no flat projection, so this is a second renderer over the same data: the
+// outlines it already loaded, the same colours, the same dots, the same answers on hover and
+// click. Equirectangular, because every texture in this component is already in it.
+const FLAT = document.getElementById("flat");
+
+function flatSize() {
+  const w = FLAT.clientWidth, h = panelHeight;
+  if (FLAT.width !== w * devicePixelRatio || FLAT.height !== h * devicePixelRatio) {
+    FLAT.width = w * devicePixelRatio;
+    FLAT.height = h * devicePixelRatio;
+    FLAT.style.height = h + "px";
+  }
+  // Mercator: the world is a square as wide as the panel, scrolled rather than letterboxed —
+  // which is how every web map behaves, and what the eye expects from a flat view.
+  const span = w * flatView.zoom;
+  return { w, h, span };
+}
+
+const MERC_LIMIT = 85.05113;
+
+function mercY(lat) {                       // 0 at the north edge, 1 at the south
+  const clipped = Math.max(-MERC_LIMIT, Math.min(MERC_LIMIT, lat));
+  const r = Math.log(Math.tan(Math.PI / 4 + (clipped * Math.PI) / 360));
+  return 0.5 - r / (2 * Math.PI);
+}
+
+function mercLat(y) {
+  return (Math.atan(Math.sinh((0.5 - y) * 2 * Math.PI)) * 180) / Math.PI;
+}
+
+function clampPan(size) {
+  // North and south have ends; east and west do not. Longitude wraps, so x is folded back into
+  // one world-width and the drawing is repeated either side of it.
+  flatView.y = Math.min(0, Math.max(Math.min(0, size.h - size.span), flatView.y));
+  flatView.x = (((flatView.x % size.span) + size.span) % size.span) - size.span;
+}
+
+function project(lat, lng, size) {
+  return [flatView.x + ((lng + 180) / 360) * size.span,
+          flatView.y + mercY(lat) * size.span];
+}
+
+function unproject(px, py, size) {
+  return [mercLat((py - flatView.y) / size.span),
+          ((px - flatView.x) / size.span) * 360 - 180];
+}
+
+function ringHit(ring, lat, lng) {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i], [xj, yj] = ring[j];
+    if ((yi > lat) !== (yj > lat) && lng < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+function countryAt(lat, lng) {
+  if (!outlines) return null;
+  for (const f of outlines.features) {
+    const parts = f.geometry.type === "Polygon" ? [f.geometry.coordinates] : f.geometry.coordinates;
+    for (const rings of parts) if (ringHit(rings[0], lat, lng)) return f;
+  }
+  return null;
+}
+
+const tileCache = new Map();
+let tileRedraw = false;
+
+function tileImage(x, y, z) {
+  const key = `${z}/${x}/${y}`;
+  let img = tileCache.get(key);
+  if (!img) {
+    img = new Image();
+    img.onload = () => {
+      if (tileRedraw) return;
+      tileRedraw = true;
+      requestAnimationFrame(() => { tileRedraw = false; drawFlat(); });
+    };
+    img.src = ESRI(x, y, z);
+    tileCache.set(key, img);
+    if (tileCache.size > 1200) tileCache.delete(tileCache.keys().next().value);
+  }
+  return img.complete && img.naturalWidth ? img : null;
+}
+
+function drawTiles(ctx, size) {
+  // The zoom level that puts roughly one tile pixel on one screen pixel
+  const z = Math.max(0, Math.min(19, Math.round(Math.log2(size.span / 256))));
+  const count = 2 ** z;
+  const tile = size.span / count;
+  const firstX = Math.floor(-flatView.x / tile) - 1;
+  const lastX = Math.ceil((size.w - flatView.x) / tile) + 1;
+  const firstY = Math.max(0, Math.floor(-flatView.y / tile));
+  const lastY = Math.min(count - 1, Math.ceil((size.h - flatView.y) / tile));
+  const originX = flatView.x + firstX * tile;      // small, whatever the zoom
+  const originY = flatView.y + firstY * tile;
+  for (let x = firstX; x <= lastX; x++) {
+    const wrapped = ((x % count) + count) % count;
+    for (let y = firstY; y <= lastY; y++) {
+      const img = tileImage(wrapped, y, z);
+      if (img) ctx.drawImage(img, originX + (x - firstX) * tile, originY + (y - firstY) * tile,
+                             tile + 1, tile + 1);
+    }
+  }
+}
+
+function drawFlat() {
+  if (view !== "2d" || !outlines) return;
+  const size = flatSize();
+  clampPan(size);
+  const ctx = FLAT.getContext("2d");
+  ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+  ctx.clearRect(0, 0, size.w, size.h);
+  ctx.fillStyle = "#05070a";
+  ctx.fillRect(0, 0, size.w, size.h);
+
+  const imagery = surfaceMode === "sat" && !weatherOn;
+  const copies = [0, size.span, size.span * 2];     // one world either side of the one in view
+
+  if (imagery) {
+    drawTiles(ctx, size);
+  } else if (baseImage) {                           // the weather of the moment
+    ctx.globalAlpha = 0.85;
+    const rows = 90;                                // textures are equirectangular; Mercator is not
+    for (let i = 0; i < rows; i++) {
+      const latTop = 90 - (i * 180) / rows, latBottom = 90 - ((i + 1) * 180) / rows;
+      const yTop = flatView.y + mercY(latTop) * size.span;
+      const yBottom = flatView.y + mercY(latBottom) * size.span;
+      if (yBottom < 0 || yTop > size.h) continue;
+      copies.forEach(copy => ctx.drawImage(baseImage,
+        0, (i * baseImage.height) / rows, baseImage.width, baseImage.height / rows,
+        flatView.x + copy, yTop, size.span, Math.max(1, yBottom - yTop)));
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  const top = Object.values(byCode).filter(r => r.total > 0).sort((a, b) => b.total - a.total);
+  const max = top.length ? top[0].total : 1;
+
+  const showShapes = flatView.zoom < 600;
+  copies.forEach(copy => {
+    ctx.save();
+    ctx.translate(copy, 0);
+    if (showShapes) outlines.features.forEach(f => {
+      const r = byCode[f.properties.iso2];
+      const weight = r ? Math.log(r.total + 1) / Math.log(max + 1) : 0;
+      ctx.fillStyle = f.properties.iso2 === selected ? "rgba(94,230,255,.4)"
+        : imagery ? "rgba(0,0,0,0)"                        // let the tiles show
+        : !r || !r.total ? (baseImage ? "rgba(18,24,31,.18)" : "rgba(18,24,31,.9)")
+        : rampColor(r.share, weight);
+      ctx.strokeStyle = f.properties.iso2 === flatHover ? "#5ee6ff"
+        : imagery ? "rgba(255,255,255,.32)" : "#0b1117";
+      ctx.lineWidth = 0.7;
+      const parts = f.geometry.type === "Polygon" ? [f.geometry.coordinates] : f.geometry.coordinates;
+      parts.forEach(rings => rings.forEach((ring, index) => {
+        ctx.beginPath();
+        ring.forEach(([lng, lat], i) => {
+          const [x, y] = project(lat, lng, size);
+          i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+        });
+        ctx.closePath();
+        if (index === 0) ctx.fill();
+        ctx.stroke();
+      }));
+    });
+
+    markers.forEach(m => {
+      const [x, y] = project(m.lat, m.lng, size);
+      if (x < -40 || x > size.w + 40 || y < -40 || y > size.h + 40) return;
+      ctx.beginPath();
+      ctx.arc(x, y, Math.max(2.5, m.r * 9 * Math.sqrt(Math.min(flatView.zoom, 6))), 0, 6.2832);
+      ctx.fillStyle = m.color;
+      ctx.fill();
+    });
+    ctx.restore();
+  });
+}
+
+function flatPick(ev) {
+  const size = flatSize();
+  const rect = FLAT.getBoundingClientRect();
+  const px = ev.clientX - rect.left, py = ev.clientY - rect.top;
+  let near = null, best = 12;
+  markers.forEach(m => {
+    const [x, y] = project(m.lat, m.lng, size);
+    for (const copy of [0, size.span, size.span * 2]) {
+      const d = Math.hypot(x + copy - px, y - py);
+      if (d < best) { best = d; near = m; }
+    }
+  });
+  let [lat, lng] = unproject(px, py, size);
+  lng = ((((lng + 180) % 360) + 360) % 360) - 180;       // the view repeats; the data does not
+  return { marker: near, country: near ? null : countryAt(lat, lng), px: ev.clientX, py: ev.clientY };
+}
+
+(function wireFlat() {
+  let dragging = false, from = null;
+  FLAT.addEventListener("pointerdown", e => { dragging = true; from = [e.clientX, e.clientY]; });
+  window.addEventListener("pointerup", () => { dragging = false; });
+  FLAT.addEventListener("wheel", e => {
+    e.preventDefault();
+    const size = flatSize();
+    const rect = FLAT.getBoundingClientRect();
+    const px = e.clientX - rect.left, py = e.clientY - rect.top;
+    const factor = e.deltaY < 0 ? 1.2 : 1 / 1.2;
+    const next = Math.max(1, Math.min(400000, flatView.zoom * factor));  // down to a street
+    const real = next / flatView.zoom;
+    flatView.x = px - (px - flatView.x) * real;
+    flatView.y = py - (py - flatView.y) * real;
+    flatView.zoom = next;
+    drawFlat();
+  }, { passive: false });
+  FLAT.addEventListener("pointermove", e => {
+    if (dragging) {
+      flatView.x += e.clientX - from[0];
+      flatView.y += e.clientY - from[1];
+      from = [e.clientX, e.clientY];
+      drawFlat();
+      return;
+    }
+    const hit = flatPick(e);
+    flatHover = hit.country ? hit.country.properties.iso2 : null;
+    const w = TIP.offsetWidth || 220, h = TIP.offsetHeight || 60;
+    TIP.style.left = Math.min(Math.max(hit.px, w / 2 + 8), window.innerWidth - w / 2 - 8) + "px";
+    TIP.style.top = Math.min(Math.max(hit.py, h + 14), window.innerHeight - 8) + "px";
+    if (hit.marker) {
+      const m = hit.marker;
+      TIP.innerHTML = `<i style="display:inline-block;width:8px;height:8px;border-radius:50%;
+        background:${m.color};margin-right:.4rem;vertical-align:middle"></i><b>${m.title}</b>` +
+        (m.kicker ? ` <span class="dim">${m.kicker}</span>` : "") +
+        `<br><span class="dim">${m.layer || ""}</span>` +
+        (m.detail ? `<br>${m.detail}` : "") + (m.ts ? `<br><span class="dim">${m.ts}</span>` : "");
+      TIP.style.opacity = 1;
+    } else if (hit.country) {
+      const p = hit.country.properties, r = byCode[p.iso2];
+      TIP.innerHTML = r && r.total
+        ? `<b>${p.name}</b> <span class="dim">${p.iso2}</span><br>` +
+          `<span class="n">${r.total.toLocaleString()}</span> items · ` +
+          `<span class="n">${Math.round(r.share * 100)}%</span> negative`
+        : `<b>${p.name}</b> <span class="dim">${p.iso2}</span><br><span class="dim">no items in range</span>`;
+      TIP.style.opacity = 1;
+    } else {
+      TIP.style.opacity = 0;
+    }
+    drawFlat();
+  });
+  FLAT.addEventListener("pointerleave", () => { TIP.style.opacity = 0; flatHover = null; drawFlat(); });
+  FLAT.addEventListener("click", e => {
+    const hit = flatPick(e);
+    if (hit.marker && hit.marker.pick) sendValue(hit.marker.pick);
+    else if (hit.country) sendValue(hit.country.properties.iso2);
+  });
+  window.addEventListener("resize", () => drawFlat());
+})();
+
+function setSurface(next) {
+  surfaceMode = next;
+  document.querySelectorAll("#modes button[data-surface]").forEach(b =>
+    b.classList.toggle("on", b.dataset.surface === next));
+  applyBase();
+}
+
+const ESRI = (x, y, z) =>
+  `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`;
+
+function applyBase() {
+  if (!globe) return;
+  const credit = document.getElementById("credit");
+  if (weatherOn) {                       // the weather loop owns the surface while it runs
+    globe.globeTileEngineUrl(null);
+    credit.style.display = "none";
+    drawFlat();
+    return;
+  }
+  if (surfaceMode === "sat") {
+    // A tile engine, not one picture: globe.gl asks for the zoom level it needs, so the ground
+    // sharpens as you come down to it instead of blurring.
+    globe.globeImageUrl(null);
+    globe.globeTileEngineUrl(ESRI);
+    globe.globeTileEngineMaxLevel(19);     // 17 is a city block; 19 is a building
+    credit.style.display = "block";
+  } else {
+    globe.globeTileEngineUrl(null);
+    globe.globeImageUrl(null);
+    credit.style.display = "none";
+  }
+  drawFlat();
+}
+
+document.getElementById("modes").addEventListener("click", e => {
+  const button = e.target.closest("button");
+  if (!button) return;
+  if (button.dataset.view) {
+    setView(button.dataset.view);
+    sendValue("view:" + button.dataset.view);        // so the choice survives a rerun
+  } else if (button.dataset.surface) {
+    setSurface(button.dataset.surface);
+    sendValue("surface:" + button.dataset.surface);  // and so Python can fetch the imagery
+  }
+});
+
+function setView(next) {
+  if (next === view) return;
+  view = next;
+  const on2d = next === "2d";
+  document.querySelectorAll("#modes button[data-view]").forEach(b =>
+    b.classList.toggle("on", b.dataset.view === next));
+  EL.style.display = on2d ? "none" : "block";
+  FLAT.classList.toggle("on", on2d);
+  document.getElementById("hint").textContent = on2d
+    ? "drag to pan · scroll to zoom · click a country" : "drag to spin · click a country";
+  if (on2d) drawFlat();
 }
 
 function paintMarkers() {
@@ -216,7 +618,7 @@ function paintLabels() {
 
   globe.labelsData(placed.map(c => ({ lat: c.lat, lng: c.lng, text: c.text, quiet: c.quiet })))
     .labelText("text")
-    .labelSize(Math.max(0.42, Math.min(0.95, pov.altitude * 0.46)))
+    .labelSize(Math.max(0.06, Math.min(0.95, pov.altitude * 0.46)))
     .labelDotRadius(0)
     .labelColor(d => (d.quiet ? "rgba(236,238,241,.45)" : "rgba(255,255,255,.97)"))
     .labelResolution(3)
@@ -257,9 +659,39 @@ function build(height) {
   const mat = globe.globeMaterial();
   if (mat && mat.color) { mat.color.set("#070a0e"); mat.shininess = 2; }
 
-  globe.controls().autoRotate = true;
-  globe.controls().autoRotateSpeed = 0.32;
-  globe.controls().enableDamping = true;
+  const controls = globe.controls();
+  controls.minDistance = globe.getGlobeRadius() * 1.00005;   // ~320 m above the surface
+
+  function tuneDepth() {
+    const camera = globe.camera();
+    const radius = globe.getGlobeRadius();
+    const altitude = Math.max(0.001, camera.position.length() - radius);
+    // near a twentieth of the height, far only as deep as the view needs: the ratio stays
+    // small at every zoom, which is what keeps the surface steady
+    const near = Math.max(0.0005, altitude * 0.05);
+    const far = altitude < radius * 0.25 ? radius * 8 : radius * 600;
+    if (camera.near !== near || camera.far !== far) {
+      camera.near = near;
+      camera.far = far;
+      camera.updateProjectionMatrix();
+    }
+  }
+  controls.rotateSpeed = 1.1;
+  controls.zoomSpeed = 0.9;
+  controls.noPan = true;                     // a drag turns the world; it does not slide it
+  controls.staticMoving = false;
+  controls.dynamicDampingFactor = 0.12;
+
+  // Trackball has no auto-rotate of its own, so the idle drift is ours: a slow nudge until
+  // somebody takes hold of it.
+  (function drift() {
+    requestAnimationFrame(drift);
+    if (!globe || view !== "3d") return;
+    tuneDepth();
+    if (!spinning) return;
+    const pov = globe.pointOfView();
+    globe.pointOfView({ lat: pov.lat, lng: pov.lng + 0.03, altitude: pov.altitude }, 0);
+  })();
   globe.pointOfView({ lat: 20, lng: 52, altitude: 1.75 });   // opens on the region this monitor watches
 
   setInterval(() => {
@@ -273,7 +705,7 @@ function build(height) {
     }
   }, 300);
 
-  EL.addEventListener("pointerdown", () => { dragging = true; globe.controls().autoRotate = false; });
+  EL.addEventListener("pointerdown", () => { dragging = true; spinning = false; });
   window.addEventListener("pointerup", () => { dragging = false; });
   // Leaving the canvas should take the tooltip with it, not leave it parked in a corner
   EL.addEventListener("pointerleave", () => {
@@ -295,6 +727,7 @@ function build(height) {
 
 function render(args) {
   const height = args.height || 620;
+  panelHeight = height;
   TIP.style.opacity = 0;      // a rerun leaves the pointer where it was: do not keep its tooltip
   hovered = null;
   byCode = {};
@@ -303,17 +736,25 @@ function render(args) {
   markers = args.markers || [];
   dim = !!args.dim;
   night = nightPolygon(args.sun || null);
-
   if (!globe) {
     build(height);
     fetch("countries.geojson")
       .then(r => r.json())
-      .then(geo => { outlines = geo; paint(); })
+      .then(geo => { outlines = geo; paint(); drawFlat(); })
       .catch(() => { document.getElementById("hint").textContent = "could not load the country outlines"; });
   } else {
     globe.height(height);
     paint();
   }
+
+  weatherOn = !!(args.weather || []).length;
+  runLoop(args.weather);
+
+  basemap = args.basemap || null;
+  if (args.surface && args.surface !== surfaceMode) setSurface(args.surface);
+  else applyBase();
+  setView(args.view === "2d" ? "2d" : "3d");
+
   setHeight(height);
 }
 

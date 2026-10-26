@@ -217,10 +217,26 @@ BRAND = """
   .axn-stream .score.neu { background: #8a919c1f; color: #8a919c; }
   .axn-stream .head { color: #eceef1; font-size: .9rem; line-height: 1.35; }
 
-  .axn-context { display: flex; flex-wrap: wrap; gap: .4rem; margin: 0 0 .9rem; }
-  .axn-context .chip {
-    font-family: "Geist Mono", ui-monospace, monospace; font-size: .68rem; color: #a9b0ba;
-    border: 1px solid #262c34; border-radius: 999px; padding: .22rem .6rem; background: #11141a;
+  /* Live context — the weather where the story is, and the local money. It carries the same
+     weight as the figures above it, and lights its edge once on arrival so it is seen. */
+  .axn-context { display: flex; gap: .6rem; margin: .1rem 0 1rem; }
+  .axn-context > div {
+    flex: 1; min-width: 0; background: #11141a; border: 1px solid #262c34;
+    border-left: 2px solid #5ee6ff; border-radius: .6rem; padding: .5rem .65rem;
+    animation: axn-context-in .9s ease both;
+  }
+  .axn-context .axn-label { display: block; margin-bottom: .2rem; }
+  .axn-context .v {
+    display: block; font-family: "Geist Mono", ui-monospace, monospace;
+    font-size: 1.15rem; color: #eceef1; line-height: 1.25; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis;
+  }
+  .axn-context .v em { font-style: normal; font-size: .78rem; color: #a9b0ba; }
+  .axn-context .sub { display: block; font-size: .7rem; color: #8a919c; margin-top: .1rem; }
+  @keyframes axn-context-in {
+    from { opacity: 0; transform: translate3d(0, 6px, 0); box-shadow: 0 0 0 0 #5ee6ff00; }
+    45%  { box-shadow: 0 0 22px -6px #5ee6ff88; }
+    to   { opacity: 1; transform: none; box-shadow: 0 0 0 0 #5ee6ff00; }
   }
   .axn-stats { display: flex; gap: 1.8rem; margin: .2rem 0 1rem; }
   .axn-stats .axn-label { display: block; margin-bottom: .15rem; }

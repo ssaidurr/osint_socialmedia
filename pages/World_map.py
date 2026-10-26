@@ -12,7 +12,7 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
-from osint import countries, feeds, gate, geo, places, ui
+from osint import countries, feeds, gate, geo, places, ui, weather_tiles
 from osint.globe import drawable_countries, globe
 from osint.config import load_config
 from osint.ui import BRAND, NEG, NEU, POS, RANGES, SENTIMENTS, data_version, load
@@ -75,9 +75,10 @@ chosen = f3.selectbox("Or pick a country", pick_from, index=0,
 # Our own stories go on as one dot per city; the rest are public feeds that need no key.
 # Colour and size are decided here, so the globe only has to draw what it is handed.
 LAYERS = {"News by city": "news", "Earthquakes": "quakes",
-          "Disaster alerts": "gdacs", "Wildfires & storms": "eonet", "Day & night": "sun"}
+          "Disaster alerts": "gdacs", "Wildfires & storms": "eonet",
+          "Clouds": "clouds", "Rain radar": "rain", "Wind": "wind", "Day & night": "sun"}
 # Day & night is off to begin with: it is the one layer that makes half the map harder to read.
-picked_layers = st.multiselect("Layers", list(LAYERS), default=[n for n in LAYERS if n != "Day & night"],
+picked_layers = st.multiselect("Layers", list(LAYERS), default=[n for n in LAYERS if n not in ("Day & night", "Clouds", "Rain radar", "Wind")],
                                help="Our own collection, plus USGS, GDACS (UN/EC) and NASA EONET.")
 keys = {LAYERS[name] for name in picked_layers}
 
@@ -148,6 +149,36 @@ for key, label, fetch in (("quakes", "Earthquakes", feeds.earthquakes),
 
 sun = feeds.subsolar_point() if "sun" in keys else None
 
+# The weather the globe is wrapped in: a cloud mosaic, and the radar loop over it. Each step is
+# composed into one texture server-side — the globe has a single texture slot to give it.
+weather_frames: list[dict] = []
+if {"clouds", "rain", "wind"} & keys:
+    with st.spinner("Fetching the weather…"):
+        weather_frames, weather_note = weather_tiles.frames(
+            count=6, with_clouds="clouds" in keys, with_rain="rain" in keys,
+            with_wind="wind" in keys)
+    if weather_note:
+        feed_notes.append(weather_note)
+    if weather_frames:
+        counted["Weather steps"] = len(weather_frames)
+
+# ─── How the world is drawn ───────────────────────────────────────────────────
+# The 3D/2D and MAP/SAT buttons live inside the map, where the eye already is. They switch
+# instantly in the browser and tell us afterwards, so the choice survives a rerun — and so the
+# satellite imagery is only fetched once somebody actually asks for it.
+view = st.session_state.get("globe_view", "3d")
+surface = st.session_state.get("globe_surface", "map")
+
+basemap = None
+if surface == "sat" and not weather_frames:
+    with st.spinner("Fetching the satellite imagery…"):
+        still, still_note = weather_tiles.frames(count=1, with_clouds=True, with_rain=False,
+                                                 with_wind=False)
+    if still:
+        basemap = still[0]["url"]
+    elif still_note:
+        feed_notes.append(still_note)
+
 # ─── Globe + the country panel ────────────────────────────────────────────────
 left, right = st.columns([1.9, 1])
 
@@ -157,12 +188,23 @@ with left.container(border=True):
                 unsafe_allow_html=True)
     clicked = globe(ranked[["iso2", "name", "total", "negative", "share"]].to_dict("records"),
                     selected=st.session_state.get("globe_pick"), height=760,
-                    markers=markers, sun=sun, dim="news" in keys)
+                    markers=markers, sun=sun, dim="news" in keys,
+                    weather=weather_frames,
+                    view=view, surface=surface, basemap=basemap)
     if counted:
         st.caption(" · ".join(f"{name}: {n:,}" for name, n in counted.items())
                    + " — cities from GeoNames; events from USGS, GDACS (UN/EC) and NASA EONET.")
     for note in feed_notes:
         st.caption(f"⚠ {note}")
+
+# The map speaks back in three ways: a place was picked, or one of its own buttons was pressed
+if clicked and str(clicked).startswith(("view:", "surface:")):
+    kind, _, value = str(clicked).partition(":")
+    key = "globe_view" if kind == "view" else "globe_surface"
+    if st.session_state.get(key) != value:
+        st.session_state[key] = value
+        st.rerun()
+    clicked = None
 
 # A click on the globe wins; the selectbox is the way in without a mouse
 if chosen != "— none —":
@@ -194,23 +236,30 @@ def headline_rows(frame: pd.DataFrame, limit: int = 8) -> str:
 def context_strip(country_code: str, point: tuple | None = None) -> str:
     """Weather where the story is, and what the local money is worth — two public feeds.
 
-    Both are optional: if either is unreachable the strip simply says less.
+    Drawn with the same weight as the numbers above it: as a pair of pills it read as a
+    footnote and went unnoticed. Both are optional — if a feed is unreachable its block is
+    simply left out.
     """
-    bits = []
+    blocks = []
     place = point or places.biggest_city(country_code)
     if place:
         name, lat, lng = place
         now = feeds.weather(lat, lng)
         if now:
-            bits.append(f'<span class="chip">{html_lib.escape(name)} · {now["sky"]} · '
-                        f'{now["temp"]}°C · {now["humidity"]}% · {now["wind"]} km/h</span>')
+            blocks.append(
+                f'<div><span class="axn-label">weather · {html_lib.escape(name)}</span>'
+                f'<span class="v">{now["temp"]}°C <em>{now["sky"]}</em></span>'
+                f'<span class="sub">{now["humidity"]}% humidity · {now["wind"]} km/h wind</span></div>')
     money = places.currencies().get(country_code)
     table, as_of = feeds.rates()
     if money and table.get(money[0]):
         rate = table[money[0]]
         shown = f"{rate:,.2f}" if rate >= 1 else f"{rate:.4f}"
-        bits.append(f'<span class="chip">1 USD = {shown} {money[0]} · {as_of}</span>')
-    return f'<div class="axn-context">{"".join(bits)}</div>' if bits else ""
+        blocks.append(
+            f'<div><span class="axn-label">1 USD buys</span>'
+            f'<span class="v">{shown} <em>{money[0]}</em></span>'
+            f'<span class="sub">{html_lib.escape(money[1])} · {as_of}</span></div>')
+    return f'<div class="axn-context">{"".join(blocks)}</div>' if blocks else ""
 
 
 with right.container(border=True):
