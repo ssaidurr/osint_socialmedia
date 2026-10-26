@@ -186,11 +186,19 @@ with left.container(border=True):
     st.markdown('<div class="axn-head"><span class="axn-label">Where the news is</span>'
                 f'<span class="axn-label right">{len(located):,} located · {range_name.lower()}</span></div>',
                 unsafe_allow_html=True)
-    clicked = globe(ranked[["iso2", "name", "total", "negative", "share"]].to_dict("records"),
-                    selected=st.session_state.get("globe_pick"), height=760,
-                    markers=markers, sun=sun, dim="news" in keys,
-                    weather=weather_frames,
-                    view=view, surface=surface, basemap=basemap)
+    try:
+        clicked = globe(ranked[["iso2", "name", "total", "negative", "share"]].to_dict("records"),
+                        selected=st.session_state.get("globe_pick"), height=760,
+                        markers=markers, sun=sun, dim="news" in keys,
+                        weather=weather_frames,
+                        view=view, surface=surface, basemap=basemap)
+    except TypeError:
+        # Streamlit Cloud re-reads this file on deploy but keeps modules it has already
+        # imported, so for one run the new page can be talking to the old osint.globe. A
+        # restart is the only cure, and saying so beats a traceback.
+        st.error("This build is half-loaded: the page is newer than the component it calls. "
+                 "Open **Manage app** (bottom right) and press **Reboot app**.")
+        st.stop()
     if counted:
         st.caption(" · ".join(f"{name}: {n:,}" for name, n in counted.items())
                    + " — cities from GeoNames; events from USGS, GDACS (UN/EC) and NASA EONET.")
