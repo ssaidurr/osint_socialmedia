@@ -12,12 +12,30 @@ never an exception: one unreachable server must not take the page with it.
 from __future__ import annotations
 
 import math
+import time
 from datetime import datetime, timedelta, timezone
 
 import requests
 import streamlit as st
 
 HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; axn-pulse-news-monitor/1.0)"}
+
+# A feed that answers is worth holding for a while; a feed that failed is worth asking again
+# soon. Streamlit's own cache keeps both for the same length of time, which is how one bad
+# minute at NASA left the map without wildfires for half an hour.
+_HELD: dict[str, tuple[float, tuple]] = {}
+RETRY_AFTER_FAILURE = 90
+
+
+def _held(name: str, ttl: int, fetch):
+    now = time.time()
+    hit = _HELD.get(name)
+    if hit and now - hit[0] < ttl:
+        return hit[1]
+    result = fetch()
+    points, note = result
+    _HELD[name] = (now if points else now - ttl + RETRY_AFTER_FAILURE, result)
+    return result
 
 # WMO weather codes, as Open-Meteo reports them
 SKY = {0: "Clear", 1: "Mainly clear", 2: "Partly cloudy", 3: "Overcast", 45: "Fog", 48: "Rime fog",
@@ -39,9 +57,12 @@ def _point(lat, lng, kind, title, detail="", level="", url="", value=None, ts=""
             "value": value, "ts": ts}
 
 
-@st.cache_data(ttl=600, show_spinner=False)
 def earthquakes(min_magnitude: float = 2.5) -> tuple[list[dict], str]:
     """Everything USGS recorded in the last 24 hours at or above the given magnitude."""
+    return _held("quakes", 600, lambda: _earthquakes(min_magnitude))
+
+
+def _earthquakes(min_magnitude: float) -> tuple[list[dict], str]:
     try:
         r = requests.get("https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_day.geojson",
                          headers=HEADERS, timeout=TIMEOUT)
@@ -63,8 +84,12 @@ def earthquakes(min_magnitude: float = 2.5) -> tuple[list[dict], str]:
         return [], f"USGS earthquakes unavailable ({type(e).__name__})"
 
 
-@st.cache_data(ttl=900, show_spinner=False)
 def disasters(days: int = 7) -> tuple[list[dict], str]:
+    """GDACS alerts, held briefly if the service is unwell."""
+    return _held("gdacs", 900, lambda: _disasters(days))
+
+
+def _disasters(days: int) -> tuple[list[dict], str]:
     """GDACS — the UN and European Commission alert system: quakes, cyclones, floods,
     volcanoes, droughts and wildfires, each with the alert level it was given."""
     names = {"EQ": "Earthquake", "TC": "Tropical cyclone", "FL": "Flood", "VO": "Volcano",
@@ -95,8 +120,12 @@ def disasters(days: int = 7) -> tuple[list[dict], str]:
         return [], f"GDACS alerts unavailable ({type(e).__name__})"
 
 
-@st.cache_data(ttl=1800, show_spinner=False)
 def natural_events(limit: int = 300) -> tuple[list[dict], str]:
+    """NASA EONET events, held briefly if the service is unwell."""
+    return _held("eonet", 1800, lambda: _natural_events(limit))
+
+
+def _natural_events(limit: int) -> tuple[list[dict], str]:
     """NASA EONET: the wildfires, storms and ice events currently open, at their latest position."""
     kinds = {"Wildfires": FIRE, "Severe Storms": STORM, "Sea and Lake Ice": ICE,
              "Volcanoes": ALERT, "Floods": ALERT}

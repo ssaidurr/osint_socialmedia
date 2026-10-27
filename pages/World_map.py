@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import html as html_lib
 import math
+from collections import Counter
 import altair as alt
 import pandas as pd
 import streamlit as st
@@ -149,18 +150,20 @@ for key, label, fetch in (("quakes", "Earthquakes", feeds.earthquakes),
 
 sun = feeds.subsolar_point() if "sun" in keys else None
 
-# The weather the globe is wrapped in: a cloud mosaic, and the radar loop over it. Each step is
-# composed into one texture server-side — the globe has a single texture slot to give it.
-weather_frames: list[dict] = []
-if {"clouds", "rain", "wind"} & keys:
-    with st.spinner("Fetching the weather…"):
-        weather_frames, weather_note = weather_tiles.frames(
-            count=6, with_clouds="clouds" in keys, with_rain="rain" in keys,
-            with_wind="wind" in keys)
-    if weather_note:
-        feed_notes.append(weather_note)
-    if weather_frames:
-        counted["Weather steps"] = len(weather_frames)
+# The key is built from the layers that were asked for, not from the dots that arrived. A feed
+# that answered with nothing then shows as an empty line rather than vanishing, which is what
+# made a six-line key look like a three-line one the morning NASA's feed was down.
+LAYER_KEYS = {
+    "news": [("rgba(94,230,255,0.95)", "City news · size = items")],
+    "quakes": [FEED_STYLE["quake"][::-1]],
+    "gdacs": [FEED_STYLE["alert"][::-1]],
+    "eonet": [FEED_STYLE["fire"][::-1], FEED_STYLE["storm"][::-1], FEED_STYLE["ice"][::-1]],
+}
+drawn = Counter(m.get("layer") for m in markers)
+legend = [{"name": name, "swatch": colour if colour.startswith("rgba") else f"rgba({colour},0.95)",
+           "count": drawn.get(name, 0)}
+          for key in ("news", "quakes", "gdacs", "eonet") if key in keys
+          for colour, name in LAYER_KEYS[key]]
 
 # ─── How the world is drawn ───────────────────────────────────────────────────
 # The 3D/2D and MAP/SAT buttons live inside the map, where the eye already is. They switch
@@ -168,6 +171,20 @@ if {"clouds", "rain", "wind"} & keys:
 # satellite imagery is only fetched once somebody actually asks for it.
 view = st.session_state.get("globe_view", "3d")
 surface = st.session_state.get("globe_surface", "map")
+
+# The weather the globe is wrapped in: a base, and the radar and wind over it. Each step is
+# composed into one texture server-side — the globe has a single surface to give it, which is
+# why the satellite imagery has to go *into* the frames rather than under them.
+weather_frames: list[dict] = []
+if {"clouds", "rain", "wind", "sun"} & keys:
+    with st.spinner("Fetching the weather…"):
+        weather_frames, weather_note = weather_tiles.frames(
+            count=6, with_clouds="clouds" in keys, with_rain="rain" in keys,
+            with_wind="wind" in keys, satellite=surface == "sat", night=sun)
+    if weather_note:
+        feed_notes.append(weather_note)
+    if weather_frames:
+        counted["Weather steps"] = len(weather_frames)
 
 basemap = None
 if surface == "sat" and not weather_frames:
@@ -191,7 +208,7 @@ with left.container(border=True):
                         selected=st.session_state.get("globe_pick"), height=760,
                         markers=markers, sun=sun, dim="news" in keys,
                         weather=weather_frames,
-                        view=view, surface=surface, basemap=basemap)
+                        view=view, surface=surface, basemap=basemap, legend=legend)
     except TypeError:
         # Streamlit Cloud re-reads this file on deploy but keeps modules it has already
         # imported, so for one run the new page can be talking to the old osint.globe. A

@@ -48,14 +48,16 @@ def _mercator_to_equirect(img: Image.Image) -> Image.Image:
     return Image.fromarray(out)
 
 
-def _radar_frame(host: str, path: str, session: requests.Session) -> Image.Image:
-    size = 2 ** ZOOM
+def _tile_mosaic(url_for, zoom: int, session: requests.Session | None = None) -> Image.Image:
+    """Stitch a whole world of Web Mercator tiles, then square it up into equirectangular."""
+    session = session or requests.Session()
+    size = 2 ** zoom
     canvas = Image.new("RGBA", (256 * size, 256 * size), (0, 0, 0, 0))
 
     def tile(xy):
         x, y = xy
         try:
-            r = session.get(f"{host}{path}/256/{ZOOM}/{x}/{y}/2/1_1.png", headers=HEADERS, timeout=15)
+            r = session.get(url_for(x, y, zoom), headers=HEADERS, timeout=20)
             return x, y, (r.content if r.status_code == 200 else None)
         except requests.RequestException:
             return x, y, None
@@ -63,8 +65,48 @@ def _radar_frame(host: str, path: str, session: requests.Session) -> Image.Image
     with ThreadPoolExecutor(max_workers=16) as pool:
         for x, y, data in pool.map(tile, [(x, y) for x in range(size) for y in range(size)]):
             if data:
-                canvas.paste(Image.open(io.BytesIO(data)).convert("RGBA"), (256 * x, 256 * y))
+                try:
+                    canvas.paste(Image.open(io.BytesIO(data)).convert("RGBA"), (256 * x, 256 * y))
+                except Exception:
+                    pass                      # one unreadable tile is a hole, not a failure
     return _mercator_to_equirect(canvas)
+
+
+def _radar_frame(host: str, path: str, session: requests.Session) -> Image.Image:
+    return _tile_mosaic(lambda x, y, z: f"{host}{path}/256/{z}/{x}/{y}/2/1_1.png", ZOOM, session)
+
+
+def _shade_night(picture: Image.Image, sun: dict) -> Image.Image:
+    """Dim the half of the world the sun is not on, with a real twilight between.
+
+    A flat dark disc laid over the globe gives a hard rim no dusk ever has. Working out the
+    sun's elevation for every pixel instead costs one array pass and gives the band of
+    half-light that actually exists — civil twilight to night across about 18 degrees.
+    """
+    lat = np.radians(np.linspace(90, -90, HEIGHT))[:, None]
+    lng = np.radians(np.linspace(-180, 180, WIDTH))[None, :]
+    declination, meridian = math.radians(sun["lat"]), math.radians(sun["lng"])
+    cos_zenith = (np.sin(lat) * math.sin(declination)
+                  + np.cos(lat) * math.cos(declination) * np.cos(lng - meridian))
+    elevation = np.degrees(np.arcsin(np.clip(cos_zenith, -1, 1)))
+    daylight = np.clip((elevation + 12) / 18, 0, 1)        # -12° is night, +6° is full day
+    factor = (0.22 + 0.78 * daylight)[:, :, None]
+    return Image.fromarray((np.asarray(picture).astype(np.float32) * factor).astype(np.uint8))
+
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def _satellite_base() -> bytes | None:
+    """Esri's imagery, one world at a time — the same picture the globe's tile engine shows,
+    flattened so the weather can be laid over it."""
+    try:
+        mosaic = _tile_mosaic(
+            lambda x, y, z: ("https://server.arcgisonline.com/ArcGIS/rest/services/"
+                             f"World_Imagery/MapServer/tile/{z}/{y}/{x}"), 3)
+        buffer = io.BytesIO()
+        mosaic.convert("RGB").save(buffer, "JPEG", quality=76)
+        return buffer.getvalue()
+    except Exception:
+        return None
 
 
 def _cloud_mask(raw: bytes) -> Image.Image:
@@ -195,20 +237,30 @@ def _clouds() -> bytes | None:
 
 @st.cache_data(ttl=600, show_spinner=False)
 def frames(count: int = 6, with_clouds: bool = True, with_rain: bool = True,
-           with_wind: bool = False) -> tuple[list[dict], str]:
+           with_wind: bool = False, satellite: bool = False,
+           night: dict | None = None) -> tuple[list[dict], str]:
     """Build the loop and return [{url, label}], newest last, plus a note if a source failed.
 
     Each step is one composed texture: a dark earth, the cloud mask over it, the wind streaks
     a little further along than the step before, and that minute's radar on top. The urls are
     relative to the component, which is what the browser asks for.
     """
-    if not any((with_clouds, with_rain, with_wind)):
+    if not any((with_clouds, with_rain, with_wind, night)):
         return [], ""
 
     notes = []
     base = Image.new("RGB", (WIDTH, HEIGHT), (7, 12, 20))
 
-    if with_clouds:
+    if satellite:
+        # Keep the satellite look while the weather plays over it: the globe has one surface,
+        # so the imagery has to be *in* the frames rather than under them.
+        raw = _satellite_base()
+        if raw:
+            base = Image.open(io.BytesIO(raw)).convert("RGB").resize((WIDTH, HEIGHT), Image.BILINEAR)
+            base = Image.eval(base, lambda v: int(v * 0.85))
+        else:
+            notes.append("Satellite imagery unavailable (Esri)")
+    elif with_clouds:
         raw = _clouds()
         if raw:
             # The mosaic is a photograph of the earth — cloud, land and sea together. Deriving a
@@ -252,6 +304,8 @@ def frames(count: int = 6, with_clouds: bool = True, with_rain: bool = True,
             picture.paste(clouds, (0, 0), clouds)
         if wind is not None:
             picture.paste(wind[i], (0, 0), wind[i])
+        if night:
+            picture = _shade_night(picture, night)
         label = ""
         if rain:
             label, echo = rain[i]
@@ -260,6 +314,8 @@ def frames(count: int = 6, with_clouds: bool = True, with_rain: bool = True,
             label = "wind · live"
         elif with_clouds:
             label = "clouds · " + (datetime.date.today() - datetime.timedelta(days=1)).strftime("%d %b")
+        elif night:
+            label = "day & night · now"
         name = f"f{stamp}_{i}.jpg"
         picture.save(FRAMES_DIR / name, "JPEG", quality=68, optimize=True)
         built.append({"url": f"frames/{name}", "label": label})

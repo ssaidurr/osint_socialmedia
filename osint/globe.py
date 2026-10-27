@@ -27,7 +27,7 @@ def globe(rows: list[dict], selected: str | None = None, height: int = 560,
           markers: list[dict] | None = None, sun: dict | None = None,
           dim: bool = False, weather: list[dict] | None = None,
           view: str = "3d", surface: str = "map", basemap: str | None = None,
-          key: str = "globe"):
+          legend: list[dict] | None = None, key: str = "globe"):
     """Draw it, and return what was last clicked: an ISO-2 country code, or "city:<name>|<cc>".
 
     `markers` are the dots laid over the countries — each already carries the colour and size
@@ -36,4 +36,4 @@ def globe(rows: list[dict], selected: str | None = None, height: int = 560,
     return _component(rows=rows, selected=selected, height=height,
                       markers=markers or [], sun=sun, dim=dim,
                       weather=weather or [], view=view, surface=surface, basemap=basemap,
-                      key=key, default=None)
+                      legend=legend or [], key=key, default=None)

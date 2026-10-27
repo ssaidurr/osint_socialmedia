@@ -98,8 +98,8 @@ const sendValue = v => post("streamlit:setComponentValue", { value: v, dataType:
 const EL = document.getElementById("globe");
 const TIP = document.getElementById("tip");
 let globe = null, outlines = null, byCode = {}, selected = null, dragging = false,
-    hovered = null, lastView = null, markers = [], night = null, dim = false,
-    hoveredPoint = null, panelHeight = 620, spinning = true, loop = [], loopAt = 0, loopTimer = null, loopKey = "",
+    hovered = null, lastView = null, markers = [], dim = false,
+    hoveredPoint = null, panelHeight = 620, spinning = true, legend = [], loop = [], loopAt = 0, loopTimer = null, loopKey = "",
     weatherOn = false, view = "3d", surfaceMode = "map", basemap = null, baseImage = null,
     flatView = { zoom: 1, x: 0, y: -40 }, flatHover = null;
 
@@ -139,12 +139,10 @@ function paintPolygons() {
   const top = Object.values(byCode).filter(r => r.total > 0).sort((a, b) => b.total - a.total);
   const max = top.length ? top[0].total : 1;
 
-  const shapes = night ? outlines.features.concat([night]) : outlines.features;
   globe
-    .polygonsData(shapes)
-    .polygonAltitude(f => (f.properties.night ? 0.0095 : 0.006))
+    .polygonsData(outlines.features)
+    .polygonAltitude(0.006)
     .polygonCapColor(f => {
-      if (f.properties.night) return "rgba(4,10,20,.22)";    // dusk, not a blackout
       if (surfaceMode === "sat" && !weatherOn) {
         // Imagery is the point of this view; a colour wash over it is not.
         return f.properties.iso2 === selected ? "rgba(94,230,255,.3)" : "rgba(0,0,0,0)";
@@ -156,9 +154,8 @@ function paintPolygons() {
       }
       return rampColor(r.share, Math.log(r.total + 1) / Math.log(max + 1));
     })
-    .polygonSideColor(f => (f.properties.night ? "rgba(0,0,0,0)" : "rgba(94,230,255,.18)"))
-    .polygonStrokeColor(f => (f.properties.night ? "rgba(94,230,255,.2)"
-                              : f.properties.iso2 === selected ? "#eafcff"
+    .polygonSideColor(() => "rgba(94,230,255,.18)")
+    .polygonStrokeColor(f => (f.properties.iso2 === selected ? "#eafcff"
                               : f.properties.iso2 === hovered ? "#5ee6ff"
                               : (surfaceMode === "sat" && !weatherOn) ? "rgba(255,255,255,.32)"
                               : weatherOn ? "#0a0f16" : "#05070a"))
@@ -473,7 +470,7 @@ function applyBase() {
   const credit = document.getElementById("credit");
   if (weatherOn) {                       // the weather loop owns the surface while it runs
     globe.globeTileEngineUrl(null);
-    credit.style.display = "none";
+    credit.style.display = surfaceMode === "sat" ? "block" : "none";
     drawFlat();
     return;
   }
@@ -542,11 +539,16 @@ function paintMarkers() {
     })
     .onPointClick(d => { if (d && d.pick) sendValue(d.pick); });
 
-  // The key, in the order the layers were handed over
-  const seen = new Map();
-  markers.forEach(d => { if (d.layer && !seen.has(d.layer)) seen.set(d.layer, d.swatch || d.color); });
-  document.getElementById("keys").innerHTML =
-    [...seen].map(([name, color]) => `<div><i style="background:${color}"></i>${name}</div>`).join("");
+  // The key lists every layer that was switched on. One that came back empty stays on the
+  // list, greyed, saying so — a feed having a bad morning should not look like a missing feature.
+  const entries = legend.length
+    ? legend
+    : [...new Map(markers.filter(d => d.layer).map(d => [d.layer, d.swatch || d.color]))]
+        .map(([name, swatch]) => ({ name, swatch, count: 1 }));
+  document.getElementById("keys").innerHTML = entries.map(e => e.count
+    ? `<div><i style="background:${e.swatch}"></i>${e.name}</div>`
+    : `<div style="opacity:.45"><i style="background:${e.swatch}"></i>${e.name} · none right now</div>`
+  ).join("");
 
   // A slow pulse under the ones that matter: a severe story, a red or orange alert
   globe.ringsData(markers.filter(d => d.pulse))
@@ -556,23 +558,6 @@ function paintMarkers() {
     .ringPropagationSpeed(1.1)
     .ringRepeatPeriod(1500)
     .ringResolution(40);
-}
-
-// The night side: everything more than 90° from the point the sun is overhead
-function nightPolygon(s) {
-  if (!s) return null;
-  const rad = d => d * Math.PI / 180, deg = r => r * 180 / Math.PI;
-  const lat0 = rad(-s.lat), lng0 = rad(s.lng + 180), d = rad(90);   // the antisolar point
-  const ring = [];
-  for (let i = 0; i <= 96; i++) {
-    const b = 2 * Math.PI * i / 96;
-    const lat = Math.asin(Math.sin(lat0) * Math.cos(d) + Math.cos(lat0) * Math.sin(d) * Math.cos(b));
-    const lng = lng0 + Math.atan2(Math.sin(b) * Math.sin(d) * Math.cos(lat0),
-                                  Math.cos(d) - Math.sin(lat0) * Math.sin(lat));
-    ring.push([((deg(lng) + 540) % 360) - 180, deg(lat)]);
-  }
-  return { type: "Feature", properties: { night: true, name: "night" },
-           geometry: { type: "Polygon", coordinates: [ring] } };
 }
 
 function paintLabels() {
@@ -634,7 +619,6 @@ function build(height) {
     .showGlobe(true).showAtmosphere(true)
     .atmosphereColor("#5ee6ff").atmosphereAltitude(0.17)
     .onPolygonHover(f => {
-      if (f && f.properties.night) f = null;     // the night side is scenery, not a target
       hovered = f ? f.properties.iso2 : null;
       if (hoveredPoint) return;                  // a dot under the pointer owns the tooltip
       globe.polygonAltitude(globe.polygonAltitude());   // re-evaluate, so the hovered one lifts
@@ -734,8 +718,8 @@ function render(args) {
   (args.rows || []).forEach(r => { byCode[r.iso2] = r; });
   selected = args.selected || null;
   markers = args.markers || [];
+  legend = args.legend || [];
   dim = !!args.dim;
-  night = nightPolygon(args.sun || null);
   if (!globe) {
     build(height);
     fetch("countries.geojson")
