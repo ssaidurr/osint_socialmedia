@@ -197,15 +197,25 @@ if surface == "sat" and not weather_frames:
         feed_notes.append(still_note)
 
 # ─── Globe + the country panel ────────────────────────────────────────────────
+# The country picker is read here, before the map is drawn, so the map is drawn with it.
+if chosen != "— none —":
+    st.session_state["globe_pick"] = chosen.split(" — ")[0]
+picked = st.session_state.get("globe_pick")
+
+# Both panels stand the same height, and the one with more to say scrolls inside itself —
+# a column twice as tall as its neighbour makes the page look broken rather than full.
+PANEL_HEIGHT = 820
+GLOBE_HEIGHT = PANEL_HEIGHT - 112        # the head line and the source caption take the rest
+
 left, right = st.columns([1.9, 1])
 
-with left.container(border=True):
+with left.container(border=True, height=PANEL_HEIGHT):
     st.markdown('<div class="axn-head"><span class="axn-label">Where the news is</span>'
                 f'<span class="axn-label right">{len(located):,} located · {range_name.lower()}</span></div>',
                 unsafe_allow_html=True)
     try:
         clicked = globe(ranked[["iso2", "name", "total", "negative", "share"]].to_dict("records"),
-                        selected=st.session_state.get("globe_pick"), height=760,
+                        selected=picked, height=GLOBE_HEIGHT,
                         markers=markers, sun=sun, dim="news" in keys,
                         weather=weather_frames,
                         view=view, surface=surface, basemap=basemap, legend=legend)
@@ -231,12 +241,10 @@ if clicked and str(clicked).startswith(("view:", "surface:")):
         st.rerun()
     clicked = None
 
-# A click on the globe wins; the selectbox is the way in without a mouse
-if chosen != "— none —":
-    st.session_state["globe_pick"] = chosen.split(" — ")[0]
-elif clicked:
+# A click on the map arrives after it was drawn, so acting on it means going round again.
+if clicked and clicked != picked:
     st.session_state["globe_pick"] = clicked
-picked = st.session_state.get("globe_pick")
+    st.rerun()
 
 
 def headline_rows(frame: pd.DataFrame, limit: int = 8) -> str:
@@ -287,7 +295,7 @@ def context_strip(country_code: str, point: tuple | None = None) -> str:
     return f'<div class="axn-context">{"".join(blocks)}</div>' if blocks else ""
 
 
-with right.container(border=True):
+with right.container(border=True, height=PANEL_HEIGHT):
     if picked and str(picked).startswith("event:"):
         # The key carries the kind and the coordinates, so it still finds its event after a rerun
         hit = next((m for m in markers if str(m.get("pick", "")) == str(picked)), None)
@@ -361,10 +369,60 @@ with right.container(border=True):
             st.session_state.pop("globe_pick", None)
             st.rerun()
     elif not picked:
-        st.markdown('<div class="axn-head"><span class="axn-label">Country</span></div>'
-                    '<p style="color:#8a919c">Click a city dot for that city, or a country for the '
-                    'whole of it — the items, what they are about and the latest headlines land here.</p>',
-                    unsafe_allow_html=True)
+        # Nothing picked yet, so the panel answers for the whole world. An empty panel beside a
+        # full globe reads as something broken; this reads as the global view it is.
+        world_negative = df[df["sentiment"] == "negative"]
+        st.markdown(f'<div class="axn-head"><span class="axn-label">Worldwide</span>'
+                    f'<span class="axn-label right">{range_name.lower()}</span></div>'
+                    + '<div class="axn-stats">' + "".join(
+                        f'<div><span class="axn-label">{label}</span><span class="v">{value}</span></div>'
+                        for label, value in (
+                            ("items", f"{len(df):,}"),
+                            ("negative", f"{len(world_negative) / len(df):.0%}"),
+                            ("avg severity",
+                             f"{world_negative['severity'].mean():.1f}" if len(world_negative) else "—"),
+                        )) + "</div>", unsafe_allow_html=True)
+
+        split = df["sentiment"].value_counts().reindex(SENTIMENTS).fillna(0).reset_index()
+        split.columns = ["sentiment", "count"]
+        st.altair_chart(
+            alt.Chart(split).mark_bar(cornerRadius=4, height={"band": 0.6}).encode(
+                x=alt.X("count:Q", title=None, axis=alt.Axis(tickMinStep=1)),
+                y=alt.Y("sentiment:N", title=None, sort=SENTIMENTS),
+                color=alt.Color("sentiment:N", legend=None,
+                                scale=alt.Scale(domain=SENTIMENTS, range=[NEG, NEU, POS])),
+                tooltip=["sentiment:N", "count:Q"],
+            ).properties(height=112), width="stretch")
+
+        world_categories = world_negative["category_label"].dropna().value_counts().head(5)
+        if not world_categories.empty:
+            bars = "".join(
+                f'<div class="bar-row"><span class="name">{html_lib.escape(str(cat))}</span>'
+                f'<span class="track"><span class="fill" '
+                f'style="width:{n / world_categories.max():.0%}"></span></span>'
+                f'<span class="n">{n}</span></div>' for cat, n in world_categories.items())
+            st.markdown('<div class="axn-head"><span class="axn-label">What the negative news '
+                        f'is about</span></div><div class="axn-bars">{bars}</div>',
+                        unsafe_allow_html=True)
+
+        if not ranked.empty:
+            busiest = ranked.head(6)
+            rows = "".join(
+                f'<div class="bar-row"><span class="name">'
+                f'{html_lib.escape(countries.NAMES.get(r.iso2, r.iso2))}</span>'
+                f'<span class="track"><span class="fill" '
+                f'style="width:{r.total / busiest["total"].max():.0%}"></span></span>'
+                f'<span class="n">{int(r.total)}</span></div>'
+                for r in busiest.itertuples())
+            st.markdown('<div class="axn-head" style="margin-top:.9rem">'
+                        '<span class="axn-label">Busiest countries</span>'
+                        f'<span class="axn-label right">{len(ranked)} with news</span></div>'
+                        f'<div class="axn-bars">{rows}</div>', unsafe_allow_html=True)
+
+        st.markdown('<div class="axn-head" style="margin-top:.9rem">'
+                    '<span class="axn-label">Latest</span>'
+                    '<span class="axn-label right">click the map for one place</span></div>'
+                    + headline_rows(df, 6), unsafe_allow_html=True)
     else:
         one = located[located["country"] == picked]
         name = countries.NAMES.get(picked, picked)

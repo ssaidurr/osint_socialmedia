@@ -99,7 +99,7 @@ const EL = document.getElementById("globe");
 const TIP = document.getElementById("tip");
 let globe = null, outlines = null, byCode = {}, selected = null, dragging = false,
     hovered = null, lastView = null, markers = [], dim = false,
-    hoveredPoint = null, panelHeight = 620, spinning = true, legend = [], loop = [], loopAt = 0, loopTimer = null, loopKey = "",
+    hoveredPoint = null, panelHeight = 620, spinning = true, legend = [], lastSelected = null, loop = [], loopAt = 0, loopTimer = null, loopKey = "",
     weatherOn = false, view = "3d", surfaceMode = "map", basemap = null, baseImage = null,
     flatView = { zoom: 1, x: 0, y: -40 }, flatHover = null;
 
@@ -141,11 +141,12 @@ function paintPolygons() {
 
   globe
     .polygonsData(outlines.features)
-    .polygonAltitude(0.006)
+    .polygonAltitude(f => (f.properties.iso2 === selected ? 0.014 : 0.006))
     .polygonCapColor(f => {
       if (surfaceMode === "sat" && !weatherOn) {
-        // Imagery is the point of this view; a colour wash over it is not.
-        return f.properties.iso2 === selected ? "rgba(94,230,255,.3)" : "rgba(0,0,0,0)";
+        // Imagery is the point of this view; a colour wash over it is not. The one country
+        // that was asked for is the exception.
+        return f.properties.iso2 === selected ? "rgba(94,230,255,.45)" : "rgba(0,0,0,0)";
       }
       const r = byCode[f.properties.iso2];
       if (f.properties.iso2 === selected) return "rgba(94,230,255,.95)";
@@ -514,6 +515,42 @@ function setView(next) {
   if (on2d) drawFlat();
 }
 
+function extent(feature) {
+  /** The widest ring of a country, as a centre and a span in degrees. */
+  const g = feature.geometry;
+  const polys = g.type === "Polygon" ? [g.coordinates] : g.coordinates;
+  let ring = null, longest = -1;
+  polys.forEach(poly => { if (poly[0].length > longest) { longest = poly[0].length; ring = poly[0]; } });
+  let minLat = 90, maxLat = -90, minLng = 180, maxLng = -180;
+  ring.forEach(([lng, lat]) => {
+    minLat = Math.min(minLat, lat); maxLat = Math.max(maxLat, lat);
+    minLng = Math.min(minLng, lng); maxLng = Math.max(maxLng, lng);
+  });
+  const lat = (minLat + maxLat) / 2;
+  return { lat, lng: (minLng + maxLng) / 2,
+           span: Math.max(maxLat - minLat, (maxLng - minLng) * Math.cos(lat * Math.PI / 180)) };
+}
+
+function goTo(iso2) {
+  if (!outlines) return;
+  const feature = outlines.features.find(f => f.properties.iso2 === iso2);
+  if (!feature) return;
+  const where = extent(feature);
+  spinning = false;                       // a chosen country should sit still to be looked at
+  if (view === "2d") {
+    const wanted = Math.max(1, Math.min(2000, 150 / Math.max(where.span, 2)));
+    flatView.zoom = wanted;
+    const size = flatSize();
+    flatView.x = size.w / 2 - ((where.lng + 180) / 360) * size.span;
+    flatView.y = size.h / 2 - mercY(where.lat) * size.span;
+    drawFlat();
+  } else {
+    // enough height to hold the whole country, with a margin either side
+    const altitude = Math.max(0.28, Math.min(2.4, where.span / 42));
+    globe.pointOfView({ lat: where.lat, lng: where.lng, altitude }, 900);
+  }
+}
+
 function paintMarkers() {
   if (!globe) return;
   globe
@@ -724,7 +761,7 @@ function render(args) {
     build(height);
     fetch("countries.geojson")
       .then(r => r.json())
-      .then(geo => { outlines = geo; paint(); drawFlat(); })
+      .then(geo => { outlines = geo; paint(); drawFlat(); if (selected) goTo(selected); })
       .catch(() => { document.getElementById("hint").textContent = "could not load the country outlines"; });
   } else {
     globe.height(height);
@@ -738,6 +775,13 @@ function render(args) {
   if (args.surface && args.surface !== surfaceMode) setSurface(args.surface);
   else applyBase();
   setView(args.view === "2d" ? "2d" : "3d");
+
+  if (selected && selected !== lastSelected) {
+    lastSelected = selected;
+    if (!String(selected).includes(":")) goTo(selected);   // a country, not a city or an event
+  } else if (!selected) {
+    lastSelected = null;
+  }
 
   setHeight(height);
 }
