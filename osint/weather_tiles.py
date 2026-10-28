@@ -76,8 +76,8 @@ def _radar_frame(host: str, path: str, session: requests.Session) -> Image.Image
     return _tile_mosaic(lambda x, y, z: f"{host}{path}/256/{z}/{x}/{y}/2/1_1.png", ZOOM, session)
 
 
-def _shade_night(picture: Image.Image, sun: dict) -> Image.Image:
-    """Dim the half of the world the sun is not on, with a real twilight between.
+def _daylight(sun: dict) -> np.ndarray:
+    """How much sun each pixel of the world is getting, 0 to 1, with a real twilight between.
 
     A flat dark disc laid over the globe gives a hard rim no dusk ever has. Working out the
     sun's elevation for every pixel instead costs one array pass and gives the band of
@@ -89,45 +89,14 @@ def _shade_night(picture: Image.Image, sun: dict) -> Image.Image:
     cos_zenith = (np.sin(lat) * math.sin(declination)
                   + np.cos(lat) * math.cos(declination) * np.cos(lng - meridian))
     elevation = np.degrees(np.arcsin(np.clip(cos_zenith, -1, 1)))
-    daylight = np.clip((elevation + 12) / 18, 0, 1)        # -12° is night, +6° is full day
-    factor = (0.22 + 0.78 * daylight)[:, :, None]
-    return Image.fromarray((np.asarray(picture).astype(np.float32) * factor).astype(np.uint8))
+    return np.clip((elevation + 12) / 18, 0, 1)            # -12° is night, +6° is full day
 
 
-@st.cache_data(ttl=86400, show_spinner=False)
-def _satellite_base() -> bytes | None:
-    """Esri's imagery, one world at a time — the same picture the globe's tile engine shows,
-    flattened so the weather can be laid over it."""
-    try:
-        mosaic = _tile_mosaic(
-            lambda x, y, z: ("https://server.arcgisonline.com/ArcGIS/rest/services/"
-                             f"World_Imagery/MapServer/tile/{z}/{y}/{x}"), 3)
-        buffer = io.BytesIO()
-        mosaic.convert("RGB").save(buffer, "JPEG", quality=76)
-        return buffer.getvalue()
-    except Exception:
-        return None
-
-
-def _cloud_mask(raw: bytes) -> Image.Image:
-    """White cloud over transparent everything else.
-
-    The mosaic is a photograph of the whole earth, so used as-is it reads as terrain, not
-    weather. Cloud is the one thing in it that is both bright and colourless — that is what is
-    kept. Snow and bright desert come through faintly too; there is no free global cloud mask
-    that updates by the hour, and this is the honest approximation.
-    """
-    photo = np.asarray(Image.open(io.BytesIO(raw)).convert("RGB").resize((WIDTH, HEIGHT),
-                                                                        Image.BILINEAR)).astype(np.float32) / 255
-    brightest = photo.max(axis=2)
-    spread = brightest - photo.min(axis=2)
-    saturation = np.divide(spread, np.maximum(brightest, 1e-3))
-    alpha = np.clip((brightest - 0.42) / 0.38, 0, 1) * np.clip(1 - saturation * 2.3, 0, 1)
+def _night_mask(sun: dict) -> Image.Image:
+    """Black with a soft edge, to lay over imagery the globe is already drawing for itself."""
     layer = np.zeros((HEIGHT, WIDTH, 4), dtype=np.uint8)
-    layer[..., :3] = 255
-    layer[..., 3] = (alpha * 235).astype(np.uint8)
-    return Image.fromarray(layer).filter(ImageFilter.GaussianBlur(0.6))
-
+    layer[..., 3] = ((1 - _daylight(sun)) * 200).astype(np.uint8)
+    return Image.fromarray(layer)
 
 @st.cache_data(ttl=10800, show_spinner=False)
 def _wind_grid(step_deg: int = 10) -> tuple | None:
@@ -218,61 +187,78 @@ def _wind_streaks(steps: int, seeds: int = 2200, tail: int = 10, trace: int = 52
 
 
 @st.cache_data(ttl=21600, show_spinner=False)
-def _clouds() -> bytes | None:
-    """Yesterday's global mosaic — today's is still being flown and comes back half empty."""
+def _cold_cloud() -> bytes | None:
+    """White cloud over transparent sky, read from infrared rather than from a photograph.
+
+    The true-colour mosaic cannot give this: at globe scale its ocean is as bright as its cloud,
+    so every mask drawn from it whites out the sea (differencing it against a cloud-free Blue
+    Marble was tried too, and fails the same way). Brightness temperature has no such problem —
+    cloud tops are tens of degrees colder than whatever is beneath them, by day or by night.
+    Day and night come as separate half-world swaths with their own calibration, so each is
+    scaled against its own spread before the two are joined — comparing them raw leaves a
+    straight bright seam down the terminator, which is a satellite's orbit, not weather.
+    """
     day = (datetime.date.today() - datetime.timedelta(days=1)).isoformat()
-    try:
-        r = requests.get("https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi",
-                         params={"SERVICE": "WMS", "REQUEST": "GetMap", "VERSION": "1.3.0",
-                                 "LAYERS": "VIIRS_SNPP_CorrectedReflectance_TrueColor",
-                                 "CRS": "EPSG:4326", "BBOX": "-90,-180,90,180",
-                                 "WIDTH": WIDTH, "HEIGHT": HEIGHT, "FORMAT": "image/jpeg",
-                                 "TIME": day},
-                         headers=HEADERS, timeout=90)
-        r.raise_for_status()
-        return r.content if len(r.content) > 60_000 else None      # a stub means no mosaic yet
-    except requests.RequestException:
+
+    def swath(layer: str):
+        try:
+            r = requests.get("https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi",
+                             params={"SERVICE": "WMS", "REQUEST": "GetMap", "VERSION": "1.3.0",
+                                     "LAYERS": layer, "CRS": "EPSG:4326",
+                                     "BBOX": "-90,-180,90,180", "WIDTH": WIDTH, "HEIGHT": HEIGHT,
+                                     "FORMAT": "image/png", "TIME": day},
+                             headers=HEADERS, timeout=90)
+            r.raise_for_status()
+            picture = np.asarray(Image.open(io.BytesIO(r.content))
+                                 .convert("RGBA")).astype(np.float32) / 255
+        except Exception:
+            return None
+        # The palette runs dark for warm to white for cold, so its own brightness is the reading
+        shade = picture[..., :3] @ np.array([0.299, 0.587, 0.114], dtype=np.float32)
+        lit = picture[..., 3] > 0.3
+        if not lit.any():
+            return None
+        middle, coldest = np.percentile(shade[lit], 50), np.percentile(shade[lit], 99)
+        scaled = (shade - middle) / max(coldest - middle, 1e-3)
+        return np.where(lit, scaled, -9.0)        # off-swath is absent, not warm
+
+    swaths = [s for s in (swath("VIIRS_SNPP_Brightness_Temp_BandI5_Day"),
+                          swath("VIIRS_SNPP_Brightness_Temp_BandI5_Night")) if s is not None]
+    if not swaths:
         return None
+    # 0.45 of the way from the middle of the sky to the coldest of it keeps roughly a fifth of
+    # the globe: the fronts, the spirals and the ITCZ, and not the thin haze that would veil it
+    alpha = np.clip((np.maximum.reduce(swaths) - 0.45) / 0.55, 0, 1) ** 1.25
+    layer = np.zeros((HEIGHT, WIDTH, 4), dtype=np.uint8)
+    layer[..., :3] = 255
+    layer[..., 3] = (alpha * 215).astype(np.uint8)
+    buffer = io.BytesIO()
+    Image.fromarray(layer).filter(ImageFilter.GaussianBlur(0.7)).save(buffer, "PNG")
+    return buffer.getvalue()
 
 
 @st.cache_data(ttl=600, show_spinner=False)
 def frames(count: int = 6, with_clouds: bool = True, with_rain: bool = True,
-           with_wind: bool = False, satellite: bool = False,
-           night: dict | None = None) -> tuple[list[dict], str]:
+           with_wind: bool = False, night: dict | None = None) -> tuple[list[dict], str]:
     """Build the loop and return [{url, label}], newest last, plus a note if a source failed.
 
-    Each step is one composed texture: a dark earth, the cloud mask over it, the wind streaks
-    a little further along than the step before, and that minute's radar on top. The urls are
-    relative to the component, which is what the browser asks for.
+    Each step is one *transparent* texture — cloud, the wind streaks a little further along
+    than the step before, that minute's radar, and the night side — meant to be laid over
+    whatever the globe is already drawing. It used to be composed over a copy of the earth
+    instead, which is why switching a weather layer on in satellite view replaced imagery you
+    could zoom into with a single flat picture of it. Now the imagery stays where it is.
     """
     if not any((with_clouds, with_rain, with_wind, night)):
         return [], ""
 
     notes = []
-    base = Image.new("RGB", (WIDTH, HEIGHT), (7, 12, 20))
-
-    if satellite:
-        # Keep the satellite look while the weather plays over it: the globe has one surface,
-        # so the imagery has to be *in* the frames rather than under them.
-        raw = _satellite_base()
-        if raw:
-            base = Image.open(io.BytesIO(raw)).convert("RGB").resize((WIDTH, HEIGHT), Image.BILINEAR)
-            base = Image.eval(base, lambda v: int(v * 0.85))
-        else:
-            notes.append("Satellite imagery unavailable (Esri)")
-    elif with_clouds:
-        raw = _clouds()
-        if raw:
-            # The mosaic is a photograph of the earth — cloud, land and sea together. Deriving a
-            # cloud-only mask from it was tried and dropped: at this scale the ocean is as bright
-            # and as colourless as the cloud, so the mask whited out the whole globe. The free
-            # cloud-fraction products render a ramp over every pixel, which is no better. So the
-            # photograph goes on as it is, dimmed to sit under the map and the dots.
-            clouds = Image.open(io.BytesIO(raw)).convert("RGB").resize((WIDTH, HEIGHT), Image.BILINEAR)
-            base = Image.eval(clouds, lambda v: int(v * 0.5))
-        else:
-            notes.append("Cloud mosaic unavailable (NASA GIBS)")
     clouds = None
+    if with_clouds:
+        raw = _cold_cloud()
+        if raw:
+            clouds = Image.open(io.BytesIO(raw)).convert("RGBA")
+        else:
+            notes.append("Cloud field unavailable (NASA GIBS)")
 
     rain: list[tuple[str, Image.Image]] = []
     if with_rain:
@@ -292,32 +278,35 @@ def frames(count: int = 6, with_clouds: bool = True, with_rain: bool = True,
     if with_wind and wind is None:
         notes.append("Wind field unavailable (Open-Meteo)")
 
+    dark = _night_mask(night) if night else None
+
     FRAMES_DIR.mkdir(exist_ok=True)
-    for old in FRAMES_DIR.glob("*.jpg"):
+    for old in (*FRAMES_DIR.glob("*.png"), *FRAMES_DIR.glob("*.jpg")):
         if time.time() - old.stat().st_mtime > 3600:
             old.unlink(missing_ok=True)
 
     built, stamp = [], int(time.time())
     for i in range(steps):
-        picture = base.copy()
+        picture = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
         if clouds is not None:
-            picture.paste(clouds, (0, 0), clouds)
+            picture.alpha_composite(clouds)
         if wind is not None:
-            picture.paste(wind[i], (0, 0), wind[i])
-        if night:
-            picture = _shade_night(picture, night)
+            picture.alpha_composite(wind[i].convert("RGBA"))
         label = ""
         if rain:
             label, echo = rain[i]
-            picture.paste(echo, (0, 0), echo)
+            picture.alpha_composite(echo.convert("RGBA"))
         elif with_wind:
             label = "wind · live"
         elif with_clouds:
             label = "clouds · " + (datetime.date.today() - datetime.timedelta(days=1)).strftime("%d %b")
         elif night:
             label = "day & night · now"
-        name = f"f{stamp}_{i}.jpg"
-        picture.save(FRAMES_DIR / name, "JPEG", quality=68, optimize=True)
+        if dark is not None:
+            # Night goes on last: it is the only layer that should dim the ones under it
+            picture.alpha_composite(dark)
+        name = f"f{stamp}_{i}.png"
+        picture.save(FRAMES_DIR / name, "PNG", optimize=True)
         built.append({"url": f"frames/{name}", "label": label})
     return built, " · ".join(notes)
 

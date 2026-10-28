@@ -99,11 +99,12 @@ def _text(value) -> str:
 def locate(records: tuple) -> list[dict]:
     """Place as many of `records` on the map as can be placed.
 
-    `records` is a tuple of (id, title, summary, country, sentiment, severity, source, url, ts)
-    — a tuple so Streamlit can cache the result.
+    `records` is a tuple of (id, title, summary, country, sentiment, severity, source, url, ts,
+    category) — a tuple so Streamlit can cache the result.
     """
     out = []
-    for item_id, title, summary, country, sentiment, severity, source, url, ts in records:
+    for (item_id, title, summary, country, sentiment, severity, source, url, ts,
+         category) in records:
         hit = find(_text(title), _text(country) or None) or find(_text(summary), _text(country) or None)
         if not hit:
             continue
@@ -111,6 +112,7 @@ def locate(records: tuple) -> list[dict]:
         out.append({"lat": lat, "lng": lng, "city": name, "country": city_country,
                     "title": _text(title) or _text(summary), "sentiment": sentiment,
                     "severity": None if severity is None else float(severity),
+                    "category": _text(category),
                     "source": _text(source), "url": _text(url), "ts": _text(ts)[:16].replace("T", " ")})
     return out
 

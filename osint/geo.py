@@ -8,8 +8,12 @@ from __future__ import annotations
 
 import json
 from functools import lru_cache
+from pathlib import Path
 
-from osint.globe import OUTLINES
+# The same file the globe component draws, named here rather than imported from osint.globe:
+# working out which country a point is in has nothing to do with Streamlit, and the build
+# script that stamps countries into the map layers should not have to install it.
+OUTLINES = Path(__file__).resolve().parent.parent / "components" / "globe" / "countries.geojson"
 
 
 @lru_cache(maxsize=1)

@@ -31,13 +31,32 @@
   #legend .ramp { width: 108px; height: 6px; border-radius: 3px;
                   background: linear-gradient(90deg, #5ee6ff, #8b7cff, #f87171); }
   #keys {
-    position: absolute; left: 14px; top: 12px; display: flex; flex-direction: column; gap: .34rem;
+    position: absolute; left: 14px; top: 12px; width: 236px; max-height: calc(100% - 110px);
+    display: flex; flex-direction: column; overflow: hidden;
     font-family: "Geist Mono", ui-monospace, monospace; font-size: .68rem; letter-spacing: .08em;
-    text-transform: uppercase; color: #a9b0ba; pointer-events: none;
-    background: #0b0d10c7; border: 1px solid #22272f; border-radius: 10px;
-    padding: .55rem .7rem; backdrop-filter: blur(3px);
+    text-transform: uppercase; color: #a9b0ba;
+    background: #0b0d10e6; border: 1px solid #22272f; border-radius: 10px;
+    backdrop-filter: blur(4px);
   }
-  #keys div { display: flex; align-items: center; gap: .45rem; }
+  #keys .head {
+    display: flex; align-items: center; justify-content: space-between; cursor: pointer;
+    padding: .5rem .7rem; border-bottom: 1px solid #1b1f26; color: #8a919c; flex: none;
+  }
+  #keys .list { overflow-y: auto; padding: .3rem 0; }
+  #keys .row { display: flex; align-items: center; gap: .45rem; padding: .3rem .7rem; cursor: pointer; }
+  #keys .row:hover { background: #ffffff0a; }
+  #keys .row.on { color: #eceef1; }
+  #keys .glyph { width: 15px; height: 15px; flex: none; display: block; }
+  #keys .row:not(.on) .glyph { opacity: .42; }
+  #keys .box {
+    width: 12px; height: 12px; border-radius: 3px; border: 1px solid #39414b; flex: none;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 9px; line-height: 1; color: #050607;
+  }
+  #keys .row.on .box { background: #5ee6ff; border-color: #5ee6ff; }
+  #keys .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #keys .n { color: #8a919c; font-size: .63rem; flex: none; }
+  #keys.shut .list { display: none; }
   #clock {
     position: absolute; left: 14px; bottom: 74px; display: none; align-items: center; gap: .45rem;
     font-family: "Geist Mono", ui-monospace, monospace; font-size: .68rem; letter-spacing: .1em;
@@ -64,7 +83,7 @@
   #clock i { width: 7px; height: 7px; border-radius: 50%; background: #5ee6ff; display: inline-block;
              animation: axn-beat 1.6s ease-in-out infinite; }
   @keyframes axn-beat { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
-  #keys i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+  #keys i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex: none; }
   .lbl { font-family: "Geist Mono", ui-monospace, monospace; font-size: 10px;
          color: #eceef1; text-shadow: 0 1px 6px #000; pointer-events: none; }
 </style>
@@ -85,7 +104,15 @@
   <span class="group"><button data-surface="map" class="on">MAP</button><button data-surface="sat">SAT</button></span>
 </div>
 
+<script src="icons.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/globe.gl@2.46.2/dist/globe.gl.min.js"></script>
+<script type="module">
+  // globe.gl keeps its three.js to itself, and the weather needs a mesh of its own. This is the
+  // version globe.gl 2.46 is built against; an older one fails on Matrix4.determinantAffine.
+  import("https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.module.js")
+    .then(three => { window.THREE = three; window.dispatchEvent(new Event("three-ready")); })
+    .catch(() => {});                 // no three, no overlay — the rest of the map is unharmed
+</script>
 <script>
 // ── The Streamlit component protocol, by hand: this is a plain HTML component, so the three
 //    messages it needs are posted to the parent frame directly.
@@ -99,8 +126,10 @@ const EL = document.getElementById("globe");
 const TIP = document.getElementById("tip");
 let globe = null, outlines = null, byCode = {}, selected = null, dragging = false,
     hovered = null, lastView = null, markers = [], dim = false,
-    hoveredPoint = null, panelHeight = 620, spinning = true, legend = [], lastSelected = null, loop = [], loopAt = 0, loopTimer = null, loopKey = "",
-    weatherOn = false, view = "3d", surfaceMode = "map", basemap = null, baseImage = null,
+    hoveredPoint = null, panelHeight = 620, spinning = true, lastSelected = null,
+    paths = [], layerList = [], loop = [], loopAt = 0, loopTimer = null, loopKey = "",
+    weatherOn = false, view = "3d", surfaceMode = "map", baseImage = null,
+    overlay = null, overlayUrl = "", sprites = null, iconsReady = false,
     flatView = { zoom: 1, x: 0, y: -40 }, flatHover = null;
 
 // Cyan for a quiet country, violet in between, red where the news turns negative
@@ -109,7 +138,7 @@ function rampColor(share, weight) {   // dim when markers are drawn over it
   const t = Math.max(0, Math.min(1, (share - 0.35) / 0.45)) * 2;   // 35%–80% negative, end to end
   const i = Math.min(1, Math.floor(t)), f = t - i;
   const c = stops[i].map((v, k) => Math.round(v + (stops[i + 1][k] - v) * f));
-  const overImagery = weatherOn || surfaceMode === "sat";
+  const overImagery = surfaceMode === "sat";
   const a = overImagery ? 0.08 + 0.2 * weight     // let the ground through
           : dim         ? 0.2 + 0.3 * weight
                         : 0.55 + 0.42 * weight;
@@ -130,9 +159,37 @@ function paint() {      // data changed: fills and labels both
   if (!globe || !outlines) return;
   paintPolygons();
   paintLabels();
+  paintIcons();
   paintMarkers();
+  paintPaths();
   drawFlat();
 }
+
+// The weather rides on a sphere of its own, a hair above the surface and below the country
+// shapes. It used to be painted *into* the surface texture, which is why switching a cloud
+// layer on in satellite view swapped imagery you could zoom into for one flat picture of it.
+function setOverlay(url) {
+  overlayUrl = url || "";
+  if (!window.THREE || !globe) return;        // three still loading; the listener below retries
+  if (!overlay) {
+    overlay = new THREE.Mesh(
+      new THREE.SphereGeometry(100.3, 96, 48),
+      new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false }));
+    overlay.rotation.y = -Math.PI / 2;        // the orientation three-globe gives its own sphere
+    overlay.renderOrder = 1;
+    globe.scene().add(overlay);
+  }
+  if (!overlayUrl) { overlay.visible = false; return; }
+  new THREE.TextureLoader().load(overlayUrl, tex => {
+    tex.colorSpace = THREE.SRGBColorSpace;
+    const previous = overlay.material.map;
+    overlay.material.map = tex;
+    overlay.material.needsUpdate = true;
+    overlay.visible = true;
+    if (previous) previous.dispose();
+  });
+}
+window.addEventListener("three-ready", () => { setOverlay(overlayUrl); paintIcons(); paintMarkers(); });
 
 function paintPolygons() {
   if (!globe || !outlines) return;
@@ -141,24 +198,26 @@ function paintPolygons() {
 
   globe
     .polygonsData(outlines.features)
-    .polygonAltitude(f => (f.properties.iso2 === selected ? 0.014 : 0.006))
+    // Every country sits at the same height. Lifting the chosen one used to raise its cap
+    // above the dots at 0.012 and bury the very events it was picked to show.
+    .polygonAltitude(0.006)
     .polygonCapColor(f => {
-      if (surfaceMode === "sat" && !weatherOn) {
-        // Imagery is the point of this view; a colour wash over it is not. The one country
-        // that was asked for is the exception.
-        return f.properties.iso2 === selected ? "rgba(94,230,255,.45)" : "rgba(0,0,0,0)";
+      // The chosen country is tinted and outlined, not filled in: a solid wash of cyan hides
+      // the very thing it was asked to point at, imagery and dots and all.
+      if (surfaceMode === "sat") {
+        return f.properties.iso2 === selected ? "rgba(94,230,255,.16)" : "rgba(0,0,0,0)";
       }
       const r = byCode[f.properties.iso2];
-      if (f.properties.iso2 === selected) return "rgba(94,230,255,.95)";
+      if (f.properties.iso2 === selected) return "rgba(94,230,255,.42)";
       if (!r || !r.total) {                                   // a country with no news in range
-        return (weatherOn || surfaceMode === "sat") ? "rgba(18,24,31,.1)" : "rgba(18,24,31,.9)";
+        return weatherOn ? "rgba(18,24,31,.5)" : "rgba(18,24,31,.9)";
       }
       return rampColor(r.share, Math.log(r.total + 1) / Math.log(max + 1));
     })
     .polygonSideColor(() => "rgba(94,230,255,.18)")
     .polygonStrokeColor(f => (f.properties.iso2 === selected ? "#eafcff"
                               : f.properties.iso2 === hovered ? "#5ee6ff"
-                              : (surfaceMode === "sat" && !weatherOn) ? "rgba(255,255,255,.32)"
+                              : surfaceMode === "sat" ? "rgba(255,255,255,.32)"
                               : weatherOn ? "#0a0f16" : "#05070a"))
     .polygonsTransitionDuration(260);
 }
@@ -172,9 +231,11 @@ function runLoop(weather) {
   loop = weather || [];
   const clock = document.getElementById("clock");
 
-  if (!loop.length) {                           // layer switched off: back to the bare sphere
-    globe.globeImageUrl(null);
+  if (!loop.length) {                           // layer switched off: back to the bare surface
+    setOverlay(null);
+    baseImage = null;
     clock.style.display = "none";
+    drawFlat();
     return;
   }
 
@@ -187,7 +248,7 @@ function runLoop(weather) {
     loopAt = loop.length - 1;
     const show = () => {
       const step = loop[loopAt];
-      globe.globeImageUrl(step.url);
+      setOverlay(step.url);
       baseImage = new Image();
       baseImage.onload = () => drawFlat();
       baseImage.src = step.url;
@@ -307,6 +368,22 @@ function drawTiles(ctx, size) {
   }
 }
 
+// A ring that crosses the antimeridian arrives as +179 then -179, and drawn straight that is a
+// line clean across the map — which is what those bands over Russia, Fiji and Alaska were. Each
+// point is instead shifted onto the same turn of the world as the one before it.
+function traceRing(ctx, ring, size) {
+  let previous = null, shift = 0;
+  ring.forEach(([lng, lat], i) => {
+    if (previous !== null) {
+      if (lng - previous > 180) shift -= 360;
+      else if (previous - lng > 180) shift += 360;
+    }
+    previous = lng;
+    const [x, y] = project(lat, lng + shift, size);
+    i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+  });
+}
+
 function drawFlat() {
   if (view !== "2d" || !outlines) return;
   const size = flatSize();
@@ -317,13 +394,11 @@ function drawFlat() {
   ctx.fillStyle = "#05070a";
   ctx.fillRect(0, 0, size.w, size.h);
 
-  const imagery = surfaceMode === "sat" && !weatherOn;
+  const imagery = surfaceMode === "sat";
   const copies = [0, size.span, size.span * 2];     // one world either side of the one in view
 
-  if (imagery) {
-    drawTiles(ctx, size);
-  } else if (baseImage) {                           // the weather of the moment
-    ctx.globalAlpha = 0.85;
+  if (imagery) drawTiles(ctx, size);
+  if (baseImage) {                                  // the weather of the moment, over the top
     const rows = 90;                                // textures are equirectangular; Mercator is not
     for (let i = 0; i < rows; i++) {
       const latTop = 90 - (i * 180) / rows, latBottom = 90 - ((i + 1) * 180) / rows;
@@ -334,7 +409,6 @@ function drawFlat() {
         0, (i * baseImage.height) / rows, baseImage.width, baseImage.height / rows,
         flatView.x + copy, yTop, size.span, Math.max(1, yBottom - yTop)));
     }
-    ctx.globalAlpha = 1;
   }
 
   const top = Object.values(byCode).filter(r => r.total > 0).sort((a, b) => b.total - a.total);
@@ -349,7 +423,7 @@ function drawFlat() {
       const weight = r ? Math.log(r.total + 1) / Math.log(max + 1) : 0;
       ctx.fillStyle = f.properties.iso2 === selected ? "rgba(94,230,255,.4)"
         : imagery ? "rgba(0,0,0,0)"                        // let the tiles show
-        : !r || !r.total ? (baseImage ? "rgba(18,24,31,.18)" : "rgba(18,24,31,.9)")
+        : !r || !r.total ? (baseImage ? "rgba(18,24,31,.5)" : "rgba(18,24,31,.9)")
         : rampColor(r.share, weight);
       ctx.strokeStyle = f.properties.iso2 === flatHover ? "#5ee6ff"
         : imagery ? "rgba(255,255,255,.32)" : "#0b1117";
@@ -357,21 +431,39 @@ function drawFlat() {
       const parts = f.geometry.type === "Polygon" ? [f.geometry.coordinates] : f.geometry.coordinates;
       parts.forEach(rings => rings.forEach((ring, index) => {
         ctx.beginPath();
-        ring.forEach(([lng, lat], i) => {
-          const [x, y] = project(lat, lng, size);
-          i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
-        });
+        traceRing(ctx, ring, size);
         ctx.closePath();
         if (index === 0) ctx.fill();
         ctx.stroke();
       }));
     });
 
+    // Two thousand cable strands, one path: stroking each separately costs more than drawing
+    // them does, and panning has to stay smooth with every layer switched on.
+    if (paths.length) {
+      ctx.strokeStyle = "rgba(94,230,255,.45)";
+      ctx.lineWidth = 0.6;
+      ctx.beginPath();
+      paths.forEach(line => traceRing(ctx, line.points, size));
+      ctx.stroke();
+    }
+
     markers.forEach(m => {
       const [x, y] = project(m.lat, m.lng, size);
-      if (x < -40 || x > size.w + 40 || y < -40 || y > size.h + 40) return;
+      // The canvas is already translated onto this copy of the world, so what lands on screen
+      // is x + copy. Testing x alone is what left the east and west copies unmarked.
+      if (x + copy < -40 || x + copy > size.w + 40 || y < -40 || y > size.h + 40) return;
+      const radius = Math.max(2.5, m.r * 9 * Math.sqrt(Math.min(flatView.zoom, 6)));
+      const entry = iconArt(m.icon, m.swatch || m.color);
+      if (entry && entry.drawn) {
+        // A glyph needs room to be a glyph: below about eleven pixels it is a smudge, and a
+        // smudge is the dot we were trying to get away from.
+        const side = Math.max(11, radius * 2.8);
+        ctx.drawImage(entry.canvas, x - side / 2, y - side / 2, side, side);
+        return;
+      }
       ctx.beginPath();
-      ctx.arc(x, y, Math.max(2.5, m.r * 9 * Math.sqrt(Math.min(flatView.zoom, 6))), 0, 6.2832);
+      ctx.arc(x, y, radius, 0, 6.2832);
       ctx.fillStyle = m.color;
       ctx.fill();
     });
@@ -469,12 +561,6 @@ const ESRI = (x, y, z) =>
 function applyBase() {
   if (!globe) return;
   const credit = document.getElementById("credit");
-  if (weatherOn) {                       // the weather loop owns the surface while it runs
-    globe.globeTileEngineUrl(null);
-    credit.style.display = surfaceMode === "sat" ? "block" : "none";
-    drawFlat();
-    return;
-  }
   if (surfaceMode === "sat") {
     // A tile engine, not one picture: globe.gl asks for the zoom level it needs, so the ground
     // sharpens as you come down to it instead of blurring.
@@ -551,6 +637,143 @@ function goTo(iso2) {
   }
 }
 
+// Every layer this map can draw, on or off, with what it found. A layer that is on and came
+// back empty says "none" rather than vanishing, which is how a quiet feed used to look like a
+// missing feature.
+// A layer's own shape, stroked in its own colour. Falls back to the old coloured dot for a
+// layer nobody has drawn an icon for yet, rather than leaving a hole in the row.
+function glyph(key, colour) {
+  const art = (window.LAYER_ICONS || {})[key];
+  if (!art) return `<i style="background:${colour}"></i>`;
+  return `<svg class="glyph" viewBox="0 0 24 24" fill="none" stroke="${colour}"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${art}</svg>`;
+}
+
+function drawLayerPanel() {
+  const panel = document.getElementById("keys");
+  const shut = panel.classList.contains("shut");
+  const rows = layerList.map(layer => `
+    <div class="row ${layer.on ? "on" : ""}" data-layer="${layer.key}">
+      <span class="box">${layer.on ? "✓" : ""}</span>
+      ${glyph(layer.key, layer.swatch)}
+      <span class="name">${layer.name}</span>
+      <span class="n">${layer.on ? (layer.count ? Number(layer.count).toLocaleString() : "none") : ""}</span>
+    </div>`).join("");
+  panel.innerHTML = `<div class="head"><span>Layers</span><span>${shut ? "▸" : "▾"}</span></div>
+                     <div class="list">${rows}</div>`;
+}
+
+document.getElementById("keys").addEventListener("click", e => {
+  const panel = document.getElementById("keys");
+  if (e.target.closest(".head")) { panel.classList.toggle("shut"); drawLayerPanel(); return; }
+  const row = e.target.closest(".row");
+  if (!row) return;
+  const layer = layerList.find(l => l.key === row.dataset.layer);
+  if (!layer) return;
+  layer.on = !layer.on;                      // answer the click at once, tell Python after
+  drawLayerPanel();
+  sendValue("layers:" + layerList.filter(l => l.on).map(l => l.key).join(","));
+});
+
+function paintPaths() {
+  if (!globe) return;
+  globe
+    .pathsData(paths)
+    .pathPoints("points")
+    .pathPointLat(p => p[1])
+    .pathPointLng(p => p[0])
+    .pathColor(() => ["rgba(94,230,255,.06)", "rgba(94,230,255,.5)"])
+    .pathStroke(0.4)
+    .pathPointAlt(0.004)
+    .pathTransitionDuration(0);
+}
+
+// ─── Marker icons ─────────────────────────────────────────────────────────────
+// The same glyphs the panel uses, drawn on the map itself: twenty-eight layers of identical
+// coloured dots told you a dot was there and nothing more. Each one is rasterised once per
+// layer-and-colour into a canvas, which then serves as both a WebGL point sprite on the globe
+// and an image to stamp on the 2D canvas.
+
+const ICON_PIXELS = 64;
+const iconCache = new Map();
+
+function iconArt(key, colour) {
+  const art = (window.LAYER_ICONS || {})[key];
+  if (!art) return null;
+  const id = key + "|" + colour;
+  if (iconCache.has(id)) return iconCache.get(id);
+
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = ICON_PIXELS;
+  const entry = { canvas, texture: null, drawn: false };
+  iconCache.set(id, entry);
+
+  // A solid dot behind the glyph keeps it readable over bright imagery and gives the eye the
+  // layer's colour at a glance, the way the old disc did.
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" ` +
+              `width="${ICON_PIXELS}" height="${ICON_PIXELS}">` +
+              `<circle cx="12" cy="12" r="11.5" fill="#06090d" opacity=".72"/>` +
+              `<g fill="none" stroke="${colour}" stroke-width="2.2" stroke-linecap="round" ` +
+              `stroke-linejoin="round">${art}</g></svg>`;
+  const image = new Image();
+  image.onload = () => {
+    canvas.getContext("2d").drawImage(image, 0, 0, ICON_PIXELS, ICON_PIXELS);
+    entry.drawn = true;
+    if (entry.texture) entry.texture.needsUpdate = true;
+    drawFlat();
+  };
+  image.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+  return entry;
+}
+
+// One THREE.Points per layer-and-colour: a few draw calls for a few thousand icons, where a DOM
+// element each would be a few thousand things for the browser to lay out on every frame.
+function paintIcons() {
+  if (!globe) return;
+  if (sprites) {
+    globe.scene().remove(sprites);
+    sprites.children.forEach(child => child.geometry.dispose());
+    sprites = null;
+  }
+  iconsReady = false;
+  if (!window.THREE) return;
+
+  const groups = new Map();
+  markers.forEach(m => {
+    if (!m.icon || !(window.LAYER_ICONS || {})[m.icon]) return;
+    const id = m.icon + "|" + (m.swatch || m.color);
+    if (!groups.has(id)) groups.set(id, []);
+    groups.get(id).push(m);
+  });
+  if (!groups.size) return;
+
+  sprites = new THREE.Group();
+  sprites.renderOrder = 2;
+  groups.forEach((group, id) => {
+    const split = id.lastIndexOf("|");
+    const entry = iconArt(id.slice(0, split), id.slice(split + 1));
+    if (!entry) return;
+    if (!entry.texture) {
+      entry.texture = new THREE.CanvasTexture(entry.canvas);
+      entry.texture.colorSpace = THREE.SRGBColorSpace;
+      entry.texture.needsUpdate = entry.drawn;
+    }
+    const places = new Float32Array(group.length * 3);
+    group.forEach((m, i) => {
+      const at = globe.getCoords(m.lat, m.lng, 0.016);
+      places.set([at.x, at.y, at.z], i * 3);
+    });
+    const shape = new THREE.BufferGeometry();
+    shape.setAttribute("position", new THREE.BufferAttribute(places, 3));
+    sprites.add(new THREE.Points(shape, new THREE.PointsMaterial({
+      size: 4.4, map: entry.texture, transparent: true,
+      depthWrite: false, alphaTest: 0.04, sizeAttenuation: true,
+    })));
+  });
+  globe.scene().add(sprites);
+  iconsReady = sprites.children.length > 0;
+}
+
 function paintMarkers() {
   if (!globe) return;
   globe
@@ -558,16 +781,26 @@ function paintMarkers() {
     .pointLat("lat").pointLng("lng")
     .pointAltitude(0.012)
     .pointRadius(d => d.r)
-    .pointColor(d => d.color)
+    // With icons drawn over them the discs are only there to be hovered and clicked: three
+    // raycasts geometry, not pixels, so an invisible disc is still a target. If three never
+    // loaded there are no icons, and the discs go back to being the marker.
+    .pointColor(d => (iconsReady ? "rgba(0,0,0,0)" : d.color))
     .pointsMerge(false)
     .pointsTransitionDuration(260)
     .pointResolution(24)
     .onPointHover(d => {
       hoveredPoint = d || null;
       if (!d) { TIP.style.opacity = 0; return; }
-      const swatch = `<i style="display:inline-block;width:8px;height:8px;border-radius:50%;
-                         background:${d.color};margin-right:.4rem;vertical-align:middle"></i>`;
-      TIP.innerHTML = `${swatch}<b>${d.title}</b>` +
+      // The layer's own glyph, so the tooltip says which layer this dot belongs to in the
+      // same language the panel does
+      const mark = window.LAYER_ICONS && window.LAYER_ICONS[d.icon]
+        ? `<svg viewBox="0 0 24 24" fill="none" stroke="${d.swatch || d.color}" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round"
+                style="width:13px;height:13px;margin-right:.4rem;vertical-align:-2px"
+           >${window.LAYER_ICONS[d.icon]}</svg>`
+        : `<i style="display:inline-block;width:8px;height:8px;border-radius:50%;
+                     background:${d.color};margin-right:.4rem;vertical-align:middle"></i>`;
+      TIP.innerHTML = `${mark}<b>${d.title}</b>` +
         (d.kicker ? ` <span class="dim">${d.kicker}</span>` : "") +
         `<br><span class="dim">${d.layer || ""}</span>` +
         (d.detail ? `<br>${d.detail}` : "") +
@@ -576,16 +809,7 @@ function paintMarkers() {
     })
     .onPointClick(d => { if (d && d.pick) sendValue(d.pick); });
 
-  // The key lists every layer that was switched on. One that came back empty stays on the
-  // list, greyed, saying so — a feed having a bad morning should not look like a missing feature.
-  const entries = legend.length
-    ? legend
-    : [...new Map(markers.filter(d => d.layer).map(d => [d.layer, d.swatch || d.color]))]
-        .map(([name, swatch]) => ({ name, swatch, count: 1 }));
-  document.getElementById("keys").innerHTML = entries.map(e => e.count
-    ? `<div><i style="background:${e.swatch}"></i>${e.name}</div>`
-    : `<div style="opacity:.45"><i style="background:${e.swatch}"></i>${e.name} · none right now</div>`
-  ).join("");
+  drawLayerPanel();
 
   // A slow pulse under the ones that matter: a severe story, a red or orange alert
   globe.ringsData(markers.filter(d => d.pulse))
@@ -658,7 +882,7 @@ function build(height) {
     .onPolygonHover(f => {
       hovered = f ? f.properties.iso2 : null;
       if (hoveredPoint) return;                  // a dot under the pointer owns the tooltip
-      globe.polygonAltitude(globe.polygonAltitude());   // re-evaluate, so the hovered one lifts
+      globe.polygonAltitude(globe.polygonAltitude());   // re-run the accessors, for the border
       if (!f) { TIP.style.opacity = 0; return; }
       const p = f.properties, r = byCode[p.iso2];
       TIP.innerHTML = r && r.total
@@ -755,7 +979,8 @@ function render(args) {
   (args.rows || []).forEach(r => { byCode[r.iso2] = r; });
   selected = args.selected || null;
   markers = args.markers || [];
-  legend = args.legend || [];
+  paths = args.paths || [];
+  layerList = args.layers || [];
   dim = !!args.dim;
   if (!globe) {
     build(height);
@@ -771,7 +996,6 @@ function render(args) {
   weatherOn = !!(args.weather || []).length;
   runLoop(args.weather);
 
-  basemap = args.basemap || null;
   if (args.surface && args.surface !== surfaceMode) setSurface(args.surface);
   else applyBase();
   setView(args.view === "2d" ? "2d" : "3d");

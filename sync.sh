@@ -24,7 +24,7 @@ git commit -qm "$MESSAGE" || echo "  ssaidurr/osint_socialmedia: nothing new to 
 git push -q origin main || { echo "  push failed for ssaidurr/osint_socialmedia"; exit 1; }
 echo "  ssaidurr/osint_socialmedia    → $(git rev-parse --short HEAD)"
 
-tar --exclude='.git' --exclude='.venv' --exclude='data' --exclude='__pycache__' \
+tar --exclude='.git' --exclude='.venv' --exclude='./data' --exclude='__pycache__' \
     --exclude='.streamlit/secrets.toml' --exclude='.DS_Store' -cf - . | (cd "$MIRROR" && tar -xf -)
 
 cd "$MIRROR" || exit 1

@@ -1,7 +1,9 @@
 .venv/
 __pycache__/
 .env
-data/
+# The collected database and its ticket files, at the repo root only — osint/data holds the
+# built map layers, which are part of the app and must ship with it.
+/data/
 .streamlit/secrets.toml
 
 # Weather frames are built at runtime and go stale in minutes

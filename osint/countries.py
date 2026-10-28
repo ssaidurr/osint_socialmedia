@@ -4,6 +4,9 @@ Generated once from pycountry, then kept here: a chart axis needs a name, and a 
 dependency for a lookup table that never changes would be silly.
 """
 
+import re
+from functools import lru_cache
+
 NAMES: dict[str, str] = {
     "AD": "Andorra",
     "AE": "United Arab Emirates",
@@ -265,3 +268,67 @@ def label(code) -> str:
     code = code.strip().upper()
     name = NAMES.get(code)
     return f"{code} — {name}" if name else code
+
+
+# The long and diplomatic names of countries, as they turn up in official headlines. WHO writes
+# "the Russian Federation" and "Kingdom of Saudi Arabia"; UNHCR and the UN agencies write much
+# the same way. Only the forms that differ from NAMES need to be here.
+ALIASES: dict[str, str] = {
+    "russian federation": "RU",
+    "democratic republic of the congo": "CD",
+    "democratic republic of congo": "CD",
+    "republic of the congo": "CG",
+    "united republic of tanzania": "TZ",
+    "kingdom of saudi arabia": "SA",
+    "islamic republic of iran": "IR",
+    "syrian arab republic": "SY",
+    "bolivarian republic of venezuela": "VE",
+    "plurinational state of bolivia": "BO",
+    "lao people's democratic republic": "LA",
+    "republic of moldova": "MD",
+    "czech republic": "CZ",
+    "republic of korea": "KR",
+    "democratic people's republic of korea": "KP",
+    "viet nam": "VN",
+    "united states of america": "US",
+    "united kingdom of great britain and northern ireland": "GB",
+    "côte d'ivoire": "CI",
+    "cote d'ivoire": "CI",
+    "ivory coast": "CI",
+    "türkiye": "TR",
+    "turkey": "TR",
+    "myanmar (burma)": "MM",
+    "burma": "MM",
+    "cabo verde": "CV",
+    "eswatini": "SZ",
+    "timor-leste": "TL",
+}
+
+
+@lru_cache(maxsize=1)
+def _name_pattern() -> tuple:
+    """One regular expression over every country name we know, longest first.
+
+    Longest first matters: "Congo" must not win inside "Democratic Republic of the Congo", and
+    "Guinea" must not win inside "Papua New Guinea".
+    """
+    known = {name.lower(): code for code, name in NAMES.items()} | ALIASES
+    ordered = sorted(known, key=len, reverse=True)
+    return re.compile(r"\b(" + "|".join(re.escape(n) for n in ordered) + r")\b", re.I), known
+
+
+def named_in(text: str) -> list[str]:
+    """The ISO-2 codes of every country a piece of text names, in the order they appear.
+
+    Headlines from the official feeds say where something happened and nothing more precise, so
+    this is how a WHO outbreak notice or a sanctions listing finds its place on the map.
+    """
+    if not text:
+        return []
+    pattern, known = _name_pattern()
+    out: list[str] = []
+    for hit in pattern.finditer(text):
+        code = known[hit.group(1).lower()]
+        if code not in out:
+            out.append(code)
+    return out

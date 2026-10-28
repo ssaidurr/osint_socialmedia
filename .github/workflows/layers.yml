@@ -1,0 +1,53 @@
+name: Refresh map layers
+
+# The built-in map layers — bases, cables, mines, ports, power stations and the rest — are
+# facts about the world, not feeds, so they ship in the repo rather than being fetched on every
+# page load. That only stays honest if something rebuilds them: this does, on the 1st of each
+# month, and commits whatever changed. The dashboard shows each layer's build date, so a run
+# that stops working becomes visible rather than quietly serving old data.
+
+on:
+  schedule:
+    - cron: "40 3 1 * *" # 03:40 UTC on the 1st
+  workflow_dispatch:
+    inputs:
+      layers:
+        description: "Which layers to rebuild (space separated, blank = all)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: axn-layers
+  cancel-in-progress: false
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      - run: pip install requests
+
+      - name: Rebuild
+        run: python tools/build_layers.py ${{ github.event.inputs.layers }}
+
+      - name: Commit what changed
+        run: |
+          git config user.name "axn-pulse-bot"
+          git config user.email "mssaidurr@gmail.com"
+          git add osint/data
+          # Nothing changed is the normal case for a quiet month, not a failure
+          if git diff --cached --quiet; then
+            echo "No layer changed this month."
+            exit 0
+          fi
+          git commit -m "Refresh the map layers from their sources"
+          git push
