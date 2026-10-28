@@ -24,8 +24,23 @@ git commit -qm "$MESSAGE" || echo "  ssaidurr/osint_socialmedia: nothing new to 
 git push -q origin main || { echo "  push failed for ssaidurr/osint_socialmedia"; exit 1; }
 echo "  ssaidurr/osint_socialmedia    → $(git rev-parse --short HEAD)"
 
-tar --exclude='.git' --exclude='.venv' --exclude='./data' --exclude='__pycache__' \
-    --exclude='.streamlit/secrets.toml' --exclude='.DS_Store' -cf - . | (cd "$MIRROR" && tar -xf -)
+# Copy the code across. The exclusions are anchored with a leading slash where they mean
+# "at the repo root only", which is why this is rsync and not tar: tar on macOS normalises
+# './data' down to 'data' and then matches it against every path component, so it silently
+# swallowed osint/data — the built map layers — and the deployment ran with empty layers.
+#
+# --delete keeps the two identical: a file deleted here disappears there rather than being
+# deployed forever. Everything excluded is left untouched on the far side, so the mirror keeps
+# its own secrets and its runtime caches.
+rsync -a --delete \
+  --exclude='/.git/' \
+  --exclude='/.venv/' \
+  --exclude='/data/' \
+  --exclude='/.streamlit/secrets.toml' \
+  --exclude='/components/globe/frames/' \
+  --exclude='__pycache__/' \
+  --exclude='.DS_Store' \
+  "$HERE"/ "$MIRROR"/ || { echo "  copy to the mirror failed"; exit 1; }
 
 cd "$MIRROR" || exit 1
 git add -A
