@@ -198,6 +198,187 @@ BRAND = """
 
   /* ── AXN Pulse panels ─────────────────────────────────────────────────────── */
   .axn-head { display: flex; align-items: center; gap: .45rem; margin-bottom: .55rem; }
+
+  /* ── Panel chrome ─────────────────────────────────────────────────────────
+     A panel's top line carries more than its name: how fresh it is, how much it holds, and
+     the way out. Keeping all of it on one row is what lets the cards sit this close together
+     without the page turning into a wall of headings. */
+  .axn-head { flex-wrap: nowrap; }
+  /* The title gives way before the chips do: "Infrastructure here" can lose its tail, but a
+     status that wraps onto a second line stops looking like a status. */
+  .axn-head > .axn-label:first-child {
+    min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .axn-head .tools {
+    margin-left: auto; display: flex; align-items: center; gap: .4rem;
+    flex-wrap: nowrap; flex: none;
+  }
+  .axn-head .tools .axn-label { white-space: nowrap; }
+  .axn-head .tip {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 14px; height: 14px; border: 1px solid #2a3038; border-radius: 50%;
+    font-family: "Geist Mono", ui-monospace, monospace; font-size: .58rem; color: #5c636d;
+    cursor: help; flex: none;
+  }
+  .axn-head .tip:hover { color: #5ee6ff; border-color: #5ee6ff66; }
+  .axn-head .chip {
+    display: inline-flex; align-items: center; gap: .3rem;
+    font-family: "Geist Mono", ui-monospace, monospace; font-size: .58rem;
+    letter-spacing: .12em; text-transform: uppercase; white-space: nowrap;
+    border: 1px solid #23272e; border-radius: 999px; padding: .1rem .42rem; color: #8a919c;
+  }
+  .axn-head .chip i {
+    width: 5px; height: 5px; border-radius: 50%; background: currentColor; flex: none;
+  }
+  .axn-head .chip.live { color: #5ee6ff; border-color: #5ee6ff33; }
+  .axn-head .chip.live i { animation: axn-blip 2.4s ease-in-out infinite; }
+  .axn-head .chip.cached { color: #ffd236; border-color: #ffd23633; }
+  .axn-head .chip.off { color: #5c636d; }
+  @keyframes axn-blip { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
+  .axn-head .count {
+    font-family: "Geist Mono", ui-monospace, monospace; font-size: .6rem; color: #c6ccd4;
+    background: #1b1f25; border-radius: 999px; padding: .08rem .4rem; min-width: 1.1rem;
+    text-align: center;
+  }
+  .axn-head .shut {
+    color: #5c636d; text-decoration: none; font-size: .85rem; line-height: 1;
+    padding: 0 .1rem;
+  }
+  .axn-head .shut:hover { color: #f87171; }
+
+  /* The grid panels run denser than the page's full-width sections: the whole point of the
+     stack is to get a lot of readings in front of the eye at once. */
+  [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .axn-head.dense) {
+    padding: .8rem .9rem .7rem !important;
+    border-radius: .8rem !important;
+  }
+  .axn-head.dense { margin-bottom: .45rem; }
+  .axn-head.dense .axn-label { font-size: .64rem; }
+
+  /* The way in: a dashed slot at the end of the grid, the way an empty one should look. The
+     tile is the button — two separate things to look at and press would be one too many. */
+  [data-testid="stPopover"] button {
+    background: transparent !important;
+    border: 1px dashed #2a3038 !important; border-radius: .8rem !important;
+    padding: 1.5rem 1rem !important; width: 100%;
+    color: #5c636d !important;
+    font-family: "Geist Mono", ui-monospace, monospace; font-size: .64rem;
+    letter-spacing: .14em; text-transform: uppercase;
+  }
+  [data-testid="stPopover"] button:hover {
+    color: #5ee6ff !important; border-color: #5ee6ff55 !important;
+  }
+
+  /* The channel and region strips. A radio group, dressed as the row of tabs a television
+     remote would have: the thing being chosen is one of a dozen, and a dropdown hides eleven
+     of them behind a click. Scoped by widget key so no other radio on the page is touched. */
+  .st-key-axn_tv [role="radiogroup"],
+  .st-key-axn_intel [role="radiogroup"],
+  .st-key-axn_cam_region [role="radiogroup"] {
+    display: flex; flex-wrap: wrap; gap: .25rem; margin-bottom: .5rem;
+  }
+  .st-key-axn_tv [role="radiogroup"] label,
+  .st-key-axn_intel [role="radiogroup"] label,
+  .st-key-axn_cam_region [role="radiogroup"] label {
+    background: #12151a; border: 1px solid #23272e; border-radius: 5px;
+    padding: .15rem .45rem; margin: 0; min-height: 0; cursor: pointer;
+  }
+  .st-key-axn_tv [role="radiogroup"] label > div:first-child,
+  .st-key-axn_intel [role="radiogroup"] label > div:first-child,
+  .st-key-axn_cam_region [role="radiogroup"] label > div:first-child {
+    display: none;  /* the dot: the chip already says which one is on */
+  }
+  .st-key-axn_tv [role="radiogroup"] label p,
+  .st-key-axn_intel [role="radiogroup"] label p,
+  .st-key-axn_cam_region [role="radiogroup"] label p {
+    font-family: "Geist Mono", ui-monospace, monospace; font-size: .55rem;
+    letter-spacing: .1em; text-transform: uppercase; color: #8a919c; margin: 0;
+  }
+  .st-key-axn_tv [role="radiogroup"] label:hover p,
+  .st-key-axn_intel [role="radiogroup"] label:hover p,
+  .st-key-axn_cam_region [role="radiogroup"] label:hover p { color: #e6e9ee; }
+  .st-key-axn_tv [role="radiogroup"] label:has(input:checked),
+  .st-key-axn_intel [role="radiogroup"] label:has(input:checked),
+  .st-key-axn_cam_region [role="radiogroup"] label:has(input:checked) {
+    background: #f8717118; border-color: #f8717155;
+  }
+  .st-key-axn_tv [role="radiogroup"] label:has(input:checked) p,
+  .st-key-axn_intel [role="radiogroup"] label:has(input:checked) p,
+  .st-key-axn_cam_region [role="radiogroup"] label:has(input:checked) p {
+    color: #f87171;
+  }
+
+  /* The wall of cameras. Pictures first and captions over them, because the whole point of a
+     webcam is the picture — a list of place names would be a worse version of the map. Any
+     tile opens where it stands: :target does it with no rerun, and nothing navigates away. */
+  .axn-cams { display: grid; grid-template-columns: repeat(2, 1fr); gap: .35rem; }
+  .axn-cams .cam {
+    position: relative; display: block; border-radius: .5rem; overflow: hidden;
+    border: 1px solid #23272e; line-height: 0;
+  }
+  .axn-cams .cam:hover { border-color: #5ee6ff55; }
+  .axn-cams .cam img { width: 100%; height: 86px; object-fit: cover; display: block; }
+  .axn-cams .cam .open { position: absolute; inset: 0; z-index: 3; }
+  .axn-cams .cam .shut {
+    display: none; position: absolute; top: .2rem; right: .35rem; z-index: 4;
+    font: 500 .9rem/1 "Geist Mono", ui-monospace, monospace; color: #e6e9ee;
+    text-shadow: 0 1px 3px #000; text-decoration: none;
+  }
+  .axn-cams .cam .shut:hover { color: #f87171; }
+  .axn-cams .cam .who, .axn-cams .cam .where {
+    position: absolute; left: .3rem; right: .3rem; display: block;
+    font-family: "Geist Mono", ui-monospace, monospace; letter-spacing: .06em;
+    text-overflow: ellipsis; overflow: hidden; white-space: nowrap; line-height: 1.3;
+    z-index: 2;  /* above the gradient below, which is painted after them */
+  }
+  .axn-cams .cam .who { bottom: .85rem; font-size: .55rem; color: #e6e9ee; }
+  .axn-cams .cam .where {
+    bottom: .2rem; font-size: .5rem; text-transform: uppercase; color: #8a919c;
+  }
+  .axn-cams .cam::after {
+    content: ""; position: absolute; inset: 0;
+    background: linear-gradient(to top, #0b0e12dd 0%, #0b0e1200 45%);
+  }
+  /* The one that was clicked: full width, tall enough to read, and its own way back */
+  .axn-cams .cam:target { grid-column: 1 / -1; border-color: #5ee6ff55; }
+  .axn-cams .cam:target img { height: 240px; }
+  .axn-cams .cam:target .open { display: none; }
+  .axn-cams .cam:target .shut { display: block; }
+
+  /* Headlines as they come off the wire. The bar down the left is severity: at a glance you
+     want to know whether to read the list at all, and colour says that faster than a number. */
+  .axn-wire { display: flex; flex-direction: column; gap: .3rem; margin-top: .5rem; }
+  .axn-wire .item {
+    border-left: 2px solid #2a3038; padding: .15rem .5rem; background: #0f1217;
+    border-radius: 0 .3rem .3rem 0;
+  }
+  .axn-wire .item.warn { border-left-color: #ffd236; }
+  .axn-wire .item.bad { border-left-color: #f87171; }
+  .axn-wire .meta {
+    display: flex; justify-content: space-between; gap: .5rem;
+    font-family: "Geist Mono", ui-monospace, monospace; font-size: .5rem;
+    letter-spacing: .1em; text-transform: uppercase; color: #5c636d;
+  }
+  .axn-wire .item a, .axn-wire .item > span {
+    display: block; font-size: .72rem; line-height: 1.35; color: #e6e9ee;
+    text-decoration: none;
+  }
+  .axn-wire .item a:hover { color: #5ee6ff; }
+  .axn-tiles .v.small { font-size: .8rem; }
+
+  /* Row badges: what a headline's provenance looks like at a glance. */
+  .axn-tags { display: flex; flex-wrap: wrap; gap: .25rem; margin-top: .3rem; }
+  .axn-tags span {
+    font-family: "Geist Mono", ui-monospace, monospace; font-size: .55rem;
+    letter-spacing: .1em; text-transform: uppercase; white-space: nowrap;
+    border: 1px solid #23272e; border-radius: 4px; padding: .05rem .3rem; color: #8a919c;
+  }
+  .axn-tags .cred.high { color: #5ee6ff; border-color: #5ee6ff33; }
+  .axn-tags .cred.mid { color: #ffd236; border-color: #ffd23633; }
+  .axn-tags .cred.low { color: #f87171; border-color: #f8717133; }
+  .axn-tags .warn { color: #ffd236; border-color: #ffd23633; }
+  .axn-tags .alert { color: #f87171; border-color: #f8717133; }
+
   .axn-label {
     font-family: "Geist Mono", ui-monospace, monospace;
     font-size: .72rem; letter-spacing: .16em; text-transform: uppercase; color: #8a919c;
@@ -244,6 +425,50 @@ BRAND = """
                   font-size: 1.5rem; color: #eceef1; line-height: 1.25; }
   .axn-index { font-family: "Geist Mono", ui-monospace, monospace; font-size: 2.3rem; color: #eceef1; line-height: 1.1; }
   .axn-index.down { color: #f87171; }
+
+  /* A grid of readings — a market tile, a macro gauge, a count. They wrap on their own so the
+     same block works in a half-width panel and a full-width one. */
+  .axn-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(134px, 1fr)); gap: .55rem; }
+  .axn-tiles > div {
+    border: 1px solid #23272e; border-radius: .7rem; padding: .55rem .65rem .5rem;
+    background: #0e1216; position: relative; overflow: hidden;
+  }
+  .axn-tiles .t {
+    font-family: "Geist Mono", ui-monospace, monospace; font-size: .62rem; letter-spacing: .12em;
+    text-transform: uppercase; color: #8a919c; display: block; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis;
+  }
+  .axn-tiles .v {
+    font-family: "Geist Mono", ui-monospace, monospace; font-size: 1.05rem; color: #eceef1;
+    display: block; margin-top: .18rem; line-height: 1.2;
+  }
+  .axn-tiles .d { font-family: "Geist Mono", ui-monospace, monospace; font-size: .7rem; }
+  .axn-tiles .d.up { color: #5ee6ff; }
+  .axn-tiles .d.down { color: #f87171; }
+  .axn-tiles .d.flat { color: #8a919c; }
+  .axn-tiles .asof { color: #5c636d; font-size: .62rem; margin-left: .35rem; }
+  .axn-tiles svg { display: block; margin-top: .3rem; width: 100%; height: 22px; }
+
+  /* A verdict line: a word and a sentence, with the word carrying the colour. */
+  .axn-verdict { display: flex; align-items: baseline; gap: .6rem; margin: .1rem 0 .9rem; flex-wrap: wrap; }
+  .axn-verdict .word { font-size: 1.5rem; color: #eceef1; letter-spacing: -.01em; }
+  .axn-verdict .word.warn { color: #ffd236; }
+  .axn-verdict .word.bad { color: #f87171; }
+  .axn-verdict .why { color: #8a919c; font-size: .82rem; }
+
+  /* The odds bar on a prediction: the share the crowd gives the leading outcome. */
+  .axn-odds .row { padding: .5rem 0; border-top: 1px solid #191b1d; }
+  .axn-odds .row:first-child { border-top: 0; }
+  .axn-odds .q { color: #eceef1; font-size: .86rem; line-height: 1.35; display: block; }
+  .axn-odds .q a { color: inherit; text-decoration: none; }
+  .axn-odds .q a:hover { color: #5ee6ff; }
+  .axn-odds .track { display: block; height: 5px; border-radius: 3px; background: #1b1f25; margin: .35rem 0 .2rem; }
+  .axn-odds .fill { display: block; height: 100%; border-radius: 3px; background: #5ee6ff; }
+  .axn-odds .fill.no { background: #8a919c; }
+  .axn-odds .meta {
+    font-family: "Geist Mono", ui-monospace, monospace; font-size: .64rem; color: #8a919c;
+    display: flex; gap: .55rem; letter-spacing: .06em; text-transform: uppercase;
+  }
 
   .axn-bars .bar-row { display: flex; align-items: center; gap: .7rem; padding: .45rem 0; font-size: .83rem; }
   .axn-bars .name { width: 120px; flex: none; color: #c6ccd4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

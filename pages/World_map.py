@@ -8,12 +8,13 @@ from __future__ import annotations
 
 import html as html_lib
 import math
+from urllib.parse import urlencode
 import altair as alt
 import pandas as pd
 import streamlit as st
 
-from osint import (countries, feeds, gate, geo, layers as static_layers, live, places, ui,
-                   weather_tiles)
+from osint import (countries, feeds, gate, geo, layers as static_layers, live, panels,
+                   places, ui, weather_tiles)
 from osint.globe import drawable_countries, globe
 from osint.config import load_config
 from osint.ui import BRAND, NEG, NEU, POS, RANGES, SENTIMENTS, data_version, load
@@ -548,7 +549,8 @@ def headline_rows(frame: pd.DataFrame, limit: int = 8) -> str:
             f'<div class="row"><div class="meta"><span>{it["ts"].strftime("%d %b %H:%M")}</span>'
             f'<span class="chip">{html_lib.escape(str(it["source"]))[:28]}</span>'
             f'<span class="score {kind}">{badge}</span></div>'
-            f'<div class="head">{f"<a href=\'{link}\' target=\'_blank\'>{head}</a>" if link else head}</div></div>')
+            f'<div class="head">{f"<a href=\'{link}\' target=\'_blank\'>{head}</a>" if link else head}</div>'
+            f'{panels.tags(panels.provenance(it))}</div>')
     return '<div class="axn-stream">' + "".join(out) + "</div>"
 
 
@@ -621,8 +623,8 @@ with right.container(border=True, height=PANEL_HEIGHT):
     elif picked and str(picked).startswith("city:"):
         # A city dot was clicked: show that city's stories rather than the whole country's
         city_name, _, city_cc = str(picked)[5:].partition("|")
-        st.markdown(f'<div class="axn-head"><span class="axn-label">{html_lib.escape(city_name)}</span>'
-                    f'<span class="axn-label right">{html_lib.escape(city_cc)}</span></div>',
+        st.markdown(panels.head(city_name, city_cc, status=("live", "live"), dense=False,
+                                tip="Stories this monitor pinned to this city."),
                     unsafe_allow_html=True)
         here = [pin for pin in (pins if "news" in keys else [])
                 if pin["city"] == city_name and pin["country"] == city_cc]
@@ -659,8 +661,10 @@ with right.container(border=True, height=PANEL_HEIGHT):
         # Nothing picked yet, so the panel answers for the whole world. An empty panel beside a
         # full globe reads as something broken; this reads as the global view it is.
         world_negative = df[df["sentiment"] == "negative"]
-        st.markdown(f'<div class="axn-head"><span class="axn-label">Worldwide</span>'
-                    f'<span class="axn-label right">{range_name.lower()}</span></div>'
+        st.markdown(panels.head("Worldwide", range_name.lower(), status=("live", "live"),
+                                dense=False,
+                                tip="This monitor's own collection in the chosen range. Click "
+                                    "a country on the globe to narrow everything to it.")
                     + '<div class="axn-stats">' + "".join(
                         f'<div><span class="axn-label">{label}</span><span class="v">{value}</span></div>'
                         for label, value in (
@@ -713,8 +717,9 @@ with right.container(border=True, height=PANEL_HEIGHT):
     else:
         one = located[located["country"] == picked]
         name = countries.NAMES.get(picked, picked)
-        st.markdown(f'<div class="axn-head"><span class="axn-label">{html_lib.escape(name)}</span>'
-                    f'<span class="axn-label right">{picked}</span></div>', unsafe_allow_html=True)
+        st.markdown(panels.head(name, picked, status=("live", "live"), dense=False,
+                                tip="This monitor's own collection from this country, in the "
+                                    "chosen range."), unsafe_allow_html=True)
         if one.empty:
             st.caption("No items from this country in the selected range.")
         else:
@@ -779,6 +784,96 @@ with right.container(border=True, height=PANEL_HEIGHT):
             if st.button("Clear selection"):
                 st.session_state.pop("globe_pick", None)
                 st.rerun()
+
+# ─── The panels under the globe ───────────────────────────────────────────────
+# Everything below answers for whatever is selected above: the world, or one country. The
+# selection is worked out once, here, so no panel has to know that a click can arrive as a
+# country, a city or an event.
+def _scope_country() -> str | None:
+    pick = str(picked or "")
+    if pick.startswith("city:"):
+        return pick[5:].partition("|")[2] or None
+    if pick.startswith("event:"):
+        hit = next((m for m in markers if str(m.get("pick", "")) == pick), None)
+        return (hit or {}).get("cc") or None
+    return pick if len(pick) == 2 else None
+
+
+scope_cc = _scope_country()
+scope = panels.Scope(
+    cc=scope_cc,
+    name=countries.NAMES.get(scope_cc, scope_cc) if scope_cc else "Worldwide",
+    news=located[located["country"] == scope_cc] if scope_cc else df,
+    world_news=df,
+    markers=markers,
+    range_name=range_name,
+)
+
+PANEL_LABELS = {f"{p.group} · {p.title}": key for key, p in panels.PANELS.items()}
+OPENING = ["News · Live intelligence", "News · Threat timeline", "Risk · Instability",
+           "Money · News ↔ markets", "Live · Live news TV", "Live · Live webcams",
+           "Money · Markets", "Money · Predictions", "Risk · Live hazards",
+           "News · What it is about"]
+st.session_state.setdefault("globe_panels", OPENING)
+
+# A set of panels travels in the link — ?panels=markets,macro, ?panels=all, ?panels=none — so
+# a view worth showing someone can be sent as a URL, and so a panel's own × has something to
+# link to. The link only speaks when it changes; after that the box on the page decides.
+asked = str(st.query_params.get("panels", "")).strip()
+if asked and asked != st.session_state.get("panels_from_link"):
+    st.session_state["panels_from_link"] = asked
+    if asked == "all":
+        st.session_state["globe_panels"] = list(PANEL_LABELS)
+    elif asked == "none":
+        st.session_state["globe_panels"] = []
+    else:
+        # Walk the registry rather than the link, so a set of panels always comes out in the
+        # same order whichever order the link happened to list them in.
+        wanted = {name.strip() for name in asked.split(",")}
+        st.session_state["globe_panels"] = [label for label, key in PANEL_LABELS.items()
+                                            if key in wanted]
+
+shown = [label for label in st.session_state["globe_panels"] if label in PANEL_LABELS]
+
+
+def _without(key: str) -> str:
+    """The link to this page with one panel closed, keeping whatever else is in the address."""
+    rest = [PANEL_LABELS[label] for label in shown if PANEL_LABELS[label] != key]
+    carried = {name: value for name, value in st.query_params.items() if name != "panels"}
+    carried["panels"] = ",".join(rest) or "none"
+    return "?" + urlencode(carried)
+
+
+scope.close_url = _without
+
+# Two to a row, with the way to add one standing in the last slot. A panel that throws takes
+# itself down and says so — every one of these reads someone else's server, and one bad
+# morning at NASA must not blank the page.
+cells = shown + ["+"]
+for pair in [cells[i:i + 2] for i in range(0, len(cells), 2)]:
+    # Both cards in a row stand to the taller one's height. Letting each keep its own left a
+    # ragged hole beside every short panel, which reads as a panel that failed to load.
+    tall = max((panels.PANELS[PANEL_LABELS[label]].height
+                for label in pair if label != "+"), default=300)
+    columns = st.columns(2)
+    for column, label in zip(columns, pair):
+        if label == "+":
+            with column.container(border=False):
+                with st.popover("＋ add a panel", use_container_width=True):
+                    st.multiselect(
+                        "Panels", list(PANEL_LABELS), key="globe_panels",
+                        label_visibility="collapsed",
+                        help="Each one answers for the country selected on the globe, or for "
+                             "the whole world.")
+            continue
+        chosen = panels.PANELS[PANEL_LABELS[label]]
+        scope.panel_key = PANEL_LABELS[label]
+        with column.container(border=True, height=tall):
+            try:
+                chosen.draw(scope)
+            except Exception as problem:            # noqa: BLE001 — a panel is never fatal
+                st.markdown(panels.head(chosen.title, shut=scope.shut()), unsafe_allow_html=True)
+                st.caption(f"This panel could not be drawn: {type(problem).__name__}.")
 
 # ─── The ranking, and whatever the map cannot draw ────────────────────────────
 with st.container(border=True):
