@@ -846,6 +846,50 @@ def _without(key: str) -> str:
 
 scope.close_url = _without
 
+def _toggle(label: str, key: str) -> None:
+    """A tick in the chooser, turned into the page's own list of panels.
+
+    The list is rebuilt by walking the registry rather than appending, so a panel switched off
+    and on again comes back where it belongs instead of at the end — the grid never reshuffles
+    under the reader.
+    """
+    picks = set(st.session_state["globe_panels"])
+    picks.add(label) if st.session_state.get(f"pick_{key}") else picks.discard(label)
+    st.session_state["globe_panels"] = [name for name in PANEL_LABELS if name in picks]
+
+
+def _picker() -> None:
+    """Every panel at once: grouped, searchable, and with the ones already up ticked.
+
+    A list of twenty-two names in a dropdown is a worse question than a wall of boxes, because
+    it hides what is already on. The ticks are the page's current state, not a separate memory
+    of it — the × on a panel and a box here say the same thing to the same list.
+    """
+    groups = ["All"] + sorted({p.group for p in panels.PANELS.values()})
+    group = st.radio("Group", groups, key="pick_group", horizontal=True,
+                     label_visibility="collapsed")
+    needle = st.text_input("Filter", key="pick_filter", placeholder="Filter panels…",
+                           label_visibility="collapsed").strip().lower()
+
+    on = set(st.session_state["globe_panels"])
+    # Set every box before any of them is drawn: a widget with a key ignores its `value` once
+    # it has state of its own, so without this a panel closed by its × would stay ticked here.
+    for key in PANEL_LABELS.values():
+        st.session_state[f"pick_{key}"] = f"{panels.PANELS[key].group} · {panels.PANELS[key].title}" in on
+
+    wanted = [(label, key) for label, key in PANEL_LABELS.items()
+              if (group == "All" or panels.PANELS[key].group == group)
+              and (not needle or needle in label.lower())]
+    if not wanted:
+        return st.caption("No panel is called that.")
+
+    st.markdown('<div class="axn-pick"></div>', unsafe_allow_html=True)
+    for row in [wanted[i:i + 3] for i in range(0, len(wanted), 3)]:
+        for column, (label, key) in zip(st.columns(3), row):
+            column.checkbox(panels.PANELS[key].title, key=f"pick_{key}",
+                            on_change=_toggle, args=(label, key))
+
+
 # Two to a row, with the way to add one standing in the last slot. A panel that throws takes
 # itself down and says so — every one of these reads someone else's server, and one bad
 # morning at NASA must not blank the page.
@@ -859,12 +903,10 @@ for pair in [cells[i:i + 2] for i in range(0, len(cells), 2)]:
     for column, label in zip(columns, pair):
         if label == "+":
             with column.container(border=False):
-                with st.popover("＋ add a panel", use_container_width=True):
-                    st.multiselect(
-                        "Panels", list(PANEL_LABELS), key="globe_panels",
-                        label_visibility="collapsed",
-                        help="Each one answers for the country selected on the globe, or for "
-                             "the whole world.")
+                with st.popover("＋ add a panel", use_container_width=True, width=620,
+                                help="Each one answers for the country selected on the "
+                                     "globe, or for the whole world."):
+                    _picker()
             continue
         chosen = panels.PANELS[PANEL_LABELS[label]]
         scope.panel_key = PANEL_LABELS[label]

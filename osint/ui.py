@@ -275,42 +275,49 @@ BRAND = """
   .st-key-axn_tv [role="radiogroup"],
   .st-key-axn_intel [role="radiogroup"],
   .st-key-axn_metal [role="radiogroup"],
+  .st-key-pick_group [role="radiogroup"],
   .st-key-axn_cam_region [role="radiogroup"] {
     display: flex; flex-wrap: wrap; gap: .25rem; margin-bottom: .5rem;
   }
   .st-key-axn_tv [role="radiogroup"] label,
   .st-key-axn_intel [role="radiogroup"],
-  .st-key-axn_metal [role="radiogroup"] label,
+  .st-key-axn_metal [role="radiogroup"],
+  .st-key-pick_group [role="radiogroup"] label,
   .st-key-axn_cam_region [role="radiogroup"] label {
     background: #12151a; border: 1px solid #23272e; border-radius: 5px;
     padding: .15rem .45rem; margin: 0; min-height: 0; cursor: pointer;
   }
   .st-key-axn_tv [role="radiogroup"] label > div:first-child,
   .st-key-axn_intel [role="radiogroup"],
-  .st-key-axn_metal [role="radiogroup"] label > div:first-child,
+  .st-key-axn_metal [role="radiogroup"],
+  .st-key-pick_group [role="radiogroup"] label > div:first-child,
   .st-key-axn_cam_region [role="radiogroup"] label > div:first-child {
     display: none;  /* the dot: the chip already says which one is on */
   }
   .st-key-axn_tv [role="radiogroup"] label p,
   .st-key-axn_intel [role="radiogroup"],
-  .st-key-axn_metal [role="radiogroup"] label p,
+  .st-key-axn_metal [role="radiogroup"],
+  .st-key-pick_group [role="radiogroup"] label p,
   .st-key-axn_cam_region [role="radiogroup"] label p {
     font-family: "Geist Mono", ui-monospace, monospace; font-size: .55rem;
     letter-spacing: .1em; text-transform: uppercase; color: #8a919c; margin: 0;
   }
   .st-key-axn_tv [role="radiogroup"] label:hover p,
   .st-key-axn_intel [role="radiogroup"],
-  .st-key-axn_metal [role="radiogroup"] label:hover p,
+  .st-key-axn_metal [role="radiogroup"],
+  .st-key-pick_group [role="radiogroup"] label:hover p,
   .st-key-axn_cam_region [role="radiogroup"] label:hover p { color: #e6e9ee; }
   .st-key-axn_tv [role="radiogroup"] label:has(input:checked),
   .st-key-axn_intel [role="radiogroup"],
-  .st-key-axn_metal [role="radiogroup"] label:has(input:checked),
+  .st-key-axn_metal [role="radiogroup"],
+  .st-key-pick_group [role="radiogroup"] label:has(input:checked),
   .st-key-axn_cam_region [role="radiogroup"] label:has(input:checked) {
     background: #f8717118; border-color: #f8717155;
   }
   .st-key-axn_tv [role="radiogroup"] label:has(input:checked) p,
   .st-key-axn_intel [role="radiogroup"],
-  .st-key-axn_metal [role="radiogroup"] label:has(input:checked) p,
+  .st-key-axn_metal [role="radiogroup"],
+  .st-key-pick_group [role="radiogroup"] label:has(input:checked) p,
   .st-key-axn_cam_region [role="radiogroup"] label:has(input:checked) p {
     color: #f87171;
   }
@@ -372,6 +379,32 @@ BRAND = """
   }
   .axn-wire .item a:hover { color: #5ee6ff; }
   .axn-tiles .v.small { font-size: .8rem; }
+
+  /* The panel chooser. A wall of boxes rather than a dropdown, because the question is
+     "which of these is on" and a dropdown answers it by hiding twenty of them. */
+  [data-testid="stPopoverBody"] { padding-top: .5rem; }
+  [data-testid="stPopoverBody"] [data-testid="stCheckbox"] > label {
+    display: flex; align-items: center; width: 100%;
+    background: #12151a; border: 1px solid #23272e; border-radius: .4rem;
+    padding: .4rem .5rem; margin: 0; cursor: pointer;
+  }
+  [data-testid="stPopoverBody"] [data-testid="stCheckbox"] > label:hover {
+    border-color: #5ee6ff55;
+  }
+  [data-testid="stPopoverBody"] [data-testid="stCheckbox"] > label:has(input:checked) {
+    background: #5ee6ff12; border-color: #5ee6ff66;
+  }
+  [data-testid="stPopoverBody"] [data-testid="stCheckbox"] p {
+    font-family: "Geist Mono", ui-monospace, monospace; font-size: .58rem;
+    letter-spacing: .08em; text-transform: uppercase; color: #8a919c; margin: 0;
+  }
+  [data-testid="stPopoverBody"] [data-testid="stCheckbox"] > label:has(input:checked) p {
+    color: #e6e9ee;
+  }
+  [data-testid="stPopoverBody"] [data-testid="stTextInput"] input {
+    font-family: "Geist Mono", ui-monospace, monospace; font-size: .62rem;
+    letter-spacing: .06em;
+  }
 
   /* Row badges: what a headline's provenance looks like at a glance. */
   .axn-tags { display: flex; flex-wrap: wrap; gap: .25rem; margin-top: .3rem; }
