@@ -45,7 +45,7 @@ def _open_markets(pages: int = 3) -> list[dict]:
             reply = requests.get(API, params={"closed": "false", "active": "true",
                                               "order": "volumeNum", "ascending": "false",
                                               "limit": 100, "offset": page * 100},
-                                 headers=HEADERS, timeout=25)
+                                 headers=HEADERS, timeout=15)
             reply.raise_for_status()
             batch = reply.json()
         except (requests.RequestException, ValueError):

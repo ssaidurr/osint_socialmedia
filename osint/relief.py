@@ -19,7 +19,7 @@ import streamlit as st
 
 HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; axn-pulse-news-monitor/1.0)"}
 API = "https://hapi.humdata.org/api/v2"
-TIMEOUT = 40
+TIMEOUT = 15
 DEFAULT_CONTACT = "axn-pulse:mssaidurr@gmail.com"
 
 

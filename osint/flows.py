@@ -28,7 +28,7 @@ import streamlit as st
 HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; axn-pulse-news-monitor/1.0)"}
 CHOKEPOINTS = ("https://services9.arcgis.com/weJ1QsnbMYJlCHdG/arcgis/rest/services/"
                "Daily_Chokepoints_Data/FeatureServer/0/query")
-TIMEOUT = 90
+TIMEOUT = 20
 
 # Which country a strait or canal is reached through. PortWatch names a waterway, not a place,
 # and several of these are shared or international water — this is only enough to answer "does

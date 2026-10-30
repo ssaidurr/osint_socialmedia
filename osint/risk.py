@@ -36,7 +36,7 @@ def _populations() -> dict[str, float]:
     try:
         reply = requests.get("https://api.worldbank.org/v2/country/all/indicator/SP.POP.TOTL",
                              params={"format": "json", "mrnev": 1, "per_page": 400},
-                             headers=HEADERS, timeout=30)
+                             headers=HEADERS, timeout=15)
         reply.raise_for_status()
         rows = reply.json()[1] or []
     except (requests.RequestException, ValueError, IndexError, KeyError):

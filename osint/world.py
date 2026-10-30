@@ -16,7 +16,7 @@ import streamlit as st
 HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; axn-pulse-news-monitor/1.0)"}
 WB = "https://api.worldbank.org/v2"
 UNHCR = "https://api.unhcr.org/population/v1/population/"
-TIMEOUT = 30
+TIMEOUT = 15
 DAY = 86400
 
 # (indicator, label, how to write it). The set is chosen to describe a country rather than to

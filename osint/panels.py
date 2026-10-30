@@ -710,7 +710,6 @@ TV_TIP = ("Each broadcaster's own round-the-clock stream, addressed by channel s
 
 @panel("tv", "Live news TV", "Live", height=440)
 def _tv(scope: Scope) -> None:
-    import streamlit.components.v1 as components
     from . import cams
 
     names = [name for name, _ in cams.CHANNELS]
@@ -724,8 +723,16 @@ def _tv(scope: Scope) -> None:
         st.session_state["axn_tv_for"] = scope.cc or ""
     chosen = st.radio("Channel", names, key="axn_tv", horizontal=True,
                       label_visibility="collapsed")
-    components.html(player(cams.embed(dict(cams.CHANNELS)[chosen]), f"{chosen} live"),
-                    height=300)
+    # components.html wraps the player in a document of our own, which is what holds it to
+    # 16:9 whatever width the panel turns out to be. It is deprecated, so when it finally goes
+    # the panel falls back to st.iframe: a fixed box rather than a shaped one, letterboxed by
+    # YouTube, which is worse-looking but not broken.
+    src = cams.embed(dict(cams.CHANNELS)[chosen])
+    try:
+        import streamlit.components.v1 as components
+        components.html(player(src, f"{chosen} live"), height=300)
+    except (ImportError, AttributeError):
+        st.iframe(src, height=300)
 
 
 CAM_TIP = ("Windy's public webcam catalogue: tens of thousands of cameras, each one placed, "

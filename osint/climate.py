@@ -15,7 +15,7 @@ import requests
 import streamlit as st
 
 HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; axn-pulse-news-monitor/1.0)"}
-TIMEOUT = 30
+TIMEOUT = 15
 
 # The US AQI bands, in the words the people who publish them use.
 BANDS = [(50, "Good"), (100, "Moderate"), (150, "Unhealthy for some"),
@@ -55,12 +55,38 @@ def air(lat: float, lng: float) -> dict | None:
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def watched() -> list[dict]:
-    """Air quality in the cities worth watching, worst first."""
+    """Air quality in the cities worth watching, worst first.
+
+    One request for all twelve, not twelve requests. Open-Meteo takes a list of coordinates and
+    answers in the order it was given them, which turns forty seconds of waiting into one — and
+    forty seconds is long enough that every panel below this one stands blank meanwhile.
+
+    It answers by position, not by coordinate: the latitudes it echoes back are rounded to its
+    own grid, so they cannot be matched against the ones we sent. Hence the length check — if
+    the two ever stop lining up, the right thing is no reading rather than a wrong city.
+    """
+    try:
+        reply = requests.get("https://air-quality-api.open-meteo.com/v1/air-quality",
+                             params={"latitude": ",".join(f"{lat}" for _, lat, _, _ in WATCHED),
+                                     "longitude": ",".join(f"{lng}" for _, _, lng, _ in WATCHED),
+                                     "current": "us_aqi,pm2_5,pm10,nitrogen_dioxide,ozone"},
+                             headers=HEADERS, timeout=TIMEOUT)
+        reply.raise_for_status()
+        places = reply.json()
+    except (requests.RequestException, ValueError):
+        return []
+    if not isinstance(places, list) or len(places) != len(WATCHED):
+        return []
+
     out = []
-    for name, lat, lng, cc in WATCHED:
-        now = air(lat, lng)
-        if now:
-            out.append({"name": name, "cc": cc, **now})
+    for (name, _, _, cc), place in zip(WATCHED, places):
+        now = (place or {}).get("current") or {}
+        if now.get("us_aqi") is None:
+            continue
+        aqi = float(now["us_aqi"])
+        out.append({"name": name, "cc": cc, "aqi": aqi, "band": band(aqi),
+                    "pm2_5": now.get("pm2_5"), "pm10": now.get("pm10"),
+                    "no2": now.get("nitrogen_dioxide"), "ozone": now.get("ozone")})
     return sorted(out, key=lambda row: -row["aqi"])
 
 

@@ -27,7 +27,7 @@ WEBCAMS = "https://api.windy.com/webcams/api/v3/webcams"
 JAMCAMS = "https://api.tfl.gov.uk/Place/Type/JamCam"
 CALTRANS = "https://cwwp2.dot.ca.gov/data/d{d}/cctv/cctvStatusD{d:0>2}.json"
 SINGAPORE = "https://api.data.gov.sg/v1/transport/traffic-images"
-TIMEOUT = 25
+TIMEOUT = 12
 
 # ─── Television ───────────────────────────────────────────────────────────────
 # Ordered so the four that most often carry a story first sit at the front of the strip.

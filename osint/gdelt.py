@@ -34,7 +34,7 @@ def timeline(country: str = "", kind: str = "tone", days: int = 7) -> tuple[list
     try:
         reply = requests.get(API, params={"query": query, "mode": mode, "format": "json",
                                           "timespan": f"{days}d"},
-                             headers=HEADERS, timeout=30)
+                             headers=HEADERS, timeout=15)
     except requests.RequestException as problem:
         return [], f"GDELT unreachable ({type(problem).__name__})."
 

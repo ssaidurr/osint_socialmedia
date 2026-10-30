@@ -15,22 +15,41 @@ Two things this module insists on:
 """
 from __future__ import annotations
 
+import time
+
 import requests
 import streamlit as st
 
 HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; axn-pulse-news-monitor/1.0)"}
 CSV = "https://fred.stlouisfed.org/graph/fredgraph.csv"
-TIMEOUT = 40
+TIMEOUT = 15
+
+
+# When FRED is unreachable it is unreachable for everything, and a page that asks it for eight
+# series pays the timeout eight times over — long enough that every panel below stands blank
+# while it waits. One unreachable host shuts the door for a minute; the next success opens it.
+# A 404 on one series id is not that, and leaves the door alone.
+_SHUT_UNTIL = 0.0
+_SHUT_FOR = 60
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def fred(series_id: str, points: int = 90) -> list[tuple[str, float]]:
     """The last `points` observations of a FRED series, oldest first, gaps dropped."""
+    global _SHUT_UNTIL
+    if time.monotonic() < _SHUT_UNTIL:
+        return []
     try:
         reply = requests.get(CSV, params={"id": series_id}, headers=HEADERS, timeout=TIMEOUT)
         reply.raise_for_status()
-    except requests.RequestException:
+    except (requests.Timeout, requests.ConnectionError):
+        # The host itself is unreachable, so the next seven series would be too
+        _SHUT_UNTIL = time.monotonic() + _SHUT_FOR
         return []
+    except requests.RequestException:
+        # A refusal about this one series says nothing about the rest
+        return []
+    _SHUT_UNTIL = 0.0
 
     rows = []
     for line in reply.text.strip().splitlines()[1:]:

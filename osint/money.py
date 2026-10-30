@@ -120,7 +120,7 @@ def crypto() -> list[dict]:
             "https://api.coingecko.com/api/v3/simple/price",
             params={"ids": "bitcoin,ethereum", "vs_currencies": "usd",
                     "include_24hr_change": "true"},
-            headers=HEADERS, timeout=20)
+            headers=HEADERS, timeout=12)
         reply.raise_for_status()
         body = reply.json()
     except (requests.RequestException, ValueError):
@@ -144,7 +144,7 @@ def fear_and_greed() -> dict | None:
     """
     try:
         reply = requests.get("https://api.alternative.me/fng/", params={"limit": 2},
-                             headers=HEADERS, timeout=20)
+                             headers=HEADERS, timeout=12)
         reply.raise_for_status()
         rows = reply.json().get("data") or []
     except (requests.RequestException, ValueError):
