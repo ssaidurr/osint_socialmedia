@@ -51,15 +51,14 @@ class Panel:
     title: str
     group: str
     draw: Callable[[Scope], None]
-    height: int = 320
 
 
 PANELS: dict[str, Panel] = {}
 
 
-def panel(key: str, title: str, group: str, height: int = 320):
+def panel(key: str, title: str, group: str):
     def keep(fn):
-        PANELS[key] = Panel(key, title, group, fn, height)
+        PANELS[key] = Panel(key, title, group, fn)
         return fn
     return keep
 
@@ -244,7 +243,7 @@ LIVE = ("live", "live")
 
 
 # ─── Money ────────────────────────────────────────────────────────────────────
-@panel("markets", "Markets", "Money", height=300)
+@panel("markets", "Markets", "Money")
 def _markets(scope: Scope) -> None:
     from . import feeds, money, places
 
@@ -293,7 +292,7 @@ def _markets(scope: Scope) -> None:
     st.markdown(tiles(shown), unsafe_allow_html=True)
 
 
-@panel("macro", "Macro stress", "Money", height=400)
+@panel("macro", "Macro stress", "Money")
 def _macro(scope: Scope) -> None:
     from . import money
 
@@ -312,7 +311,7 @@ def _macro(scope: Scope) -> None:
     st.markdown(tiles(rows), unsafe_allow_html=True)
 
 
-@panel("energy", "Energy", "Money", height=300)
+@panel("energy", "Energy", "Money")
 def _energy(scope: Scope) -> None:
     from . import money
 
@@ -328,7 +327,7 @@ def _energy(scope: Scope) -> None:
     st.markdown(tiles(rows), unsafe_allow_html=True)
 
 
-@panel("metals", "Metals & crops", "Money", height=300)
+@panel("metals", "Metals & crops", "Money")
 def _metals(scope: Scope) -> None:
     from . import money
 
@@ -344,7 +343,7 @@ def _metals(scope: Scope) -> None:
     st.markdown(tiles(rows), unsafe_allow_html=True)
 
 
-@panel("predict", "Predictions", "Money", height=340)
+@panel("predict", "Predictions", "Money")
 def _predict(scope: Scope) -> None:
     from . import predict
 
@@ -380,7 +379,7 @@ INDEX_TIP = ("Our own index, out of 100: 40% people displaced against population
              "there is. It ranks; it does not predict.")
 
 
-@panel("instability", "Instability", "Risk", height=340)
+@panel("instability", "Instability", "Risk")
 def _instability(scope: Scope) -> None:
     from . import countries, risk
 
@@ -411,7 +410,7 @@ def _instability(scope: Scope) -> None:
         unsafe_allow_html=True)
 
 
-@panel("displacement", "Displacement", "Risk", height=300)
+@panel("displacement", "Displacement", "Risk")
 def _displacement(scope: Scope) -> None:
     from . import world
 
@@ -444,7 +443,7 @@ def _displacement(scope: Scope) -> None:
     ], sparks=False), unsafe_allow_html=True)
 
 
-@panel("profile", "Country profile", "Risk", height=300)
+@panel("profile", "Country profile", "Risk")
 def _profile(scope: Scope) -> None:
     from . import world
 
@@ -465,7 +464,7 @@ def _profile(scope: Scope) -> None:
                 unsafe_allow_html=True)
 
 
-@panel("infra", "Infrastructure here", "Risk", height=300)
+@panel("infra", "Infrastructure here", "Risk")
 def _infra(scope: Scope) -> None:
     from . import layers as built
 
@@ -496,7 +495,7 @@ def _infra(scope: Scope) -> None:
     st.markdown(bars(sorted(rows, key=lambda r: -r[1])), unsafe_allow_html=True)
 
 
-@panel("hazards", "Live hazards", "Risk", height=300)
+@panel("hazards", "Live hazards", "Risk")
 def _hazards(scope: Scope) -> None:
     kinds: dict[str, int] = {}
     worst = []
@@ -566,7 +565,7 @@ def provenance(row) -> list[tuple[str, str]]:
     return out
 
 
-@panel("threat", "Threat timeline", "News", height=360)
+@panel("threat", "Threat timeline", "News")
 def _threat(scope: Scope) -> None:
     import altair as alt
 
@@ -608,7 +607,7 @@ def _threat(scope: Scope) -> None:
                     + f'<div class="axn-stream">{lines}</div>', unsafe_allow_html=True)
 
 
-@panel("topics", "What it is about", "News", height=300)
+@panel("topics", "What it is about", "News")
 def _topics(scope: Scope) -> None:
     frame = scope.news
     st.markdown(head("What it is about", scope.name if not scope.worldwide else "",
@@ -629,7 +628,7 @@ def _topics(scope: Scope) -> None:
                         for k, n in kinds.head(5).items()]), unsafe_allow_html=True)
 
 
-@panel("sources", "Publishers", "News", height=300)
+@panel("sources", "Publishers", "News")
 def _sources(scope: Scope) -> None:
     frame = scope.news
     st.markdown(head("Publishers", scope.name if not scope.worldwide else "",
@@ -651,7 +650,7 @@ def _sources(scope: Scope) -> None:
     st.markdown(bars(rows), unsafe_allow_html=True)
 
 
-@panel("tone", "Press tone", "News", height=300)
+@panel("tone", "Press tone", "News")
 def _tone(scope: Scope) -> None:
     import altair as alt
 
@@ -708,7 +707,7 @@ TV_TIP = ("Each broadcaster's own round-the-clock stream, addressed by channel s
           "A dark player means that channel is between bulletins, not that the link is broken.")
 
 
-@panel("tv", "Live news TV", "Live", height=440)
+@panel("tv", "Live news TV", "Live")
 def _tv(scope: Scope) -> None:
     from . import cams
 
@@ -773,7 +772,7 @@ def cam_grid(rows: list[dict]) -> str:
     return f'<div class="axn-cams" id="axn-cams">{"".join(cells)}</div>'
 
 
-@panel("webcams", "Live webcams", "Live", height=440)
+@panel("webcams", "Live webcams", "Live")
 def _webcams(scope: Scope) -> None:
     from . import cams, places
 
@@ -885,7 +884,7 @@ def wire(rows: pd.DataFrame, limit: int = 8) -> str:
     return f'<div class="axn-wire">{"".join(cells)}</div>'
 
 
-@panel("intel", "Live intelligence", "News", height=440)
+@panel("intel", "Live intelligence", "News")
 def _intel(scope: Scope) -> None:
     from . import intel
 
@@ -919,7 +918,7 @@ MARKETS = [("SP500", "S&P 500"), ("DJIA", "Dow Jones"), ("NASDAQCOM", "Nasdaq"),
            ("DHHNGSP", "US natural gas"), ("DGS10", "10-year yield")]
 
 
-@panel("correlate", "News ↔ markets", "Money", height=440)
+@panel("correlate", "News ↔ markets", "Money")
 def _correlate(scope: Scope) -> None:
     import altair as alt
     from . import intel, series, ui
@@ -983,7 +982,7 @@ METAL_TIP = ("Spot metal is the mid of Swissquote's public two-sided quote — a
              "set once each working day at about 16:00 CET.")
 
 
-@panel("materials", "Metals & materials", "Money", height=360)
+@panel("materials", "Metals & materials", "Money")
 def _materials(scope: Scope) -> None:
     from . import metals, money
 
@@ -1036,7 +1035,7 @@ CHOKE_TIP = ("IMF PortWatch, from AIS transponder data. Each waterway is measure
              "weeks of baseline behind it.")
 
 
-@panel("chokepoints", "Trade chokepoints", "Risk", height=340)
+@panel("chokepoints", "Trade chokepoints", "Risk")
 def _chokepoints(scope: Scope) -> None:
     from . import flows
 
@@ -1066,7 +1065,7 @@ def _chokepoints(scope: Scope) -> None:
     source(f"{len(rows)} waterways · IMF PortWatch")
 
 
-@panel("air", "Air & atmosphere", "Risk", height=390)
+@panel("air", "Air & atmosphere", "Risk")
 def _air(scope: Scope) -> None:
     from . import climate, places
 
@@ -1109,7 +1108,7 @@ def _air(scope: Scope) -> None:
                               "history": co2["history"]}]), unsafe_allow_html=True)
 
 
-@panel("relief", "Humanitarian response", "Risk", height=340)
+@panel("relief", "Humanitarian response", "Risk")
 def _relief(scope: Scope) -> None:
     from . import countries, relief, risk, world
 

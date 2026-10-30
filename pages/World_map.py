@@ -895,10 +895,9 @@ def _picker() -> None:
 # morning at NASA must not blank the page.
 cells = shown + ["+"]
 for pair in [cells[i:i + 2] for i in range(0, len(cells), 2)]:
-    # Both cards in a row stand to the taller one's height. Letting each keep its own left a
-    # ragged hole beside every short panel, which reads as a panel that failed to load.
-    tall = max((panels.PANELS[PANEL_LABELS[label]].height
-                for label in pair if label != "+"), default=300)
+    # Each card is as tall as what is in it. Holding both to the taller one's height, which is
+    # what this did before, meant a short panel carried the difference as blank space — and
+    # when both were short the page grew a blank band the width of the screen.
     columns = st.columns(2)
     for column, label in zip(columns, pair):
         if label == "+":
@@ -910,7 +909,7 @@ for pair in [cells[i:i + 2] for i in range(0, len(cells), 2)]:
             continue
         chosen = panels.PANELS[PANEL_LABELS[label]]
         scope.panel_key = PANEL_LABELS[label]
-        with column.container(border=True, height=tall):
+        with column.container(border=True):
             try:
                 chosen.draw(scope)
             except Exception as problem:            # noqa: BLE001 — a panel is never fatal
