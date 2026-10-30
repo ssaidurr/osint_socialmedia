@@ -406,6 +406,16 @@ BRAND = """
     letter-spacing: .06em;
   }
 
+  [data-testid="stPopoverBody"] [data-testid="stFormSubmitButton"] button {
+    background: #5ee6ff14 !important; border: 1px solid #5ee6ff55 !important;
+    color: #5ee6ff !important; border-radius: .4rem !important; margin-top: .4rem;
+    font-family: "Geist Mono", ui-monospace, monospace; font-size: .6rem;
+    letter-spacing: .14em; text-transform: uppercase;
+  }
+  [data-testid="stPopoverBody"] [data-testid="stFormSubmitButton"] button:hover {
+    background: #5ee6ff22 !important; border-color: #5ee6ff !important;
+  }
+
   /* Row badges: what a headline's provenance looks like at a glance. */
   .axn-tags { display: flex; flex-wrap: wrap; gap: .25rem; margin-top: .3rem; }
   .axn-tags span {

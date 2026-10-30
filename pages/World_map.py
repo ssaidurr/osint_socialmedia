@@ -846,24 +846,17 @@ def _without(key: str) -> str:
 
 scope.close_url = _without
 
-def _toggle(label: str, key: str) -> None:
-    """A tick in the chooser, turned into the page's own list of panels.
-
-    The list is rebuilt by walking the registry rather than appending, so a panel switched off
-    and on again comes back where it belongs instead of at the end — the grid never reshuffles
-    under the reader.
-    """
-    picks = set(st.session_state["globe_panels"])
-    picks.add(label) if st.session_state.get(f"pick_{key}") else picks.discard(label)
-    st.session_state["globe_panels"] = [name for name in PANEL_LABELS if name in picks]
-
-
 def _picker() -> None:
     """Every panel at once: grouped, searchable, and with the ones already up ticked.
 
     A list of twenty-two names in a dropdown is a worse question than a wall of boxes, because
     it hides what is already on. The ticks are the page's current state, not a separate memory
     of it — the × on a panel and a box here say the same thing to the same list.
+
+    The boxes sit in a form so that ticking four of them costs one redraw rather than four.
+    Every widget outside a form reruns the whole page on each click, and this page is twenty
+    panels of other people's servers; a chooser that reloaded between every tick would be
+    slower to use than the dropdown it replaced.
     """
     groups = ["All"] + sorted({p.group for p in panels.PANELS.values()})
     group = st.radio("Group", groups, key="pick_group", horizontal=True,
@@ -872,10 +865,14 @@ def _picker() -> None:
                            label_visibility="collapsed").strip().lower()
 
     on = set(st.session_state["globe_panels"])
-    # Set every box before any of them is drawn: a widget with a key ignores its `value` once
-    # it has state of its own, so without this a panel closed by its × would stay ticked here.
-    for key in PANEL_LABELS.values():
-        st.session_state[f"pick_{key}"] = f"{panels.PANELS[key].group} · {panels.PANELS[key].title}" in on
+    # A box takes its `value` only the first time its key is seen, so the keys carry a
+    # generation that moves whenever the page's own list moves — a panel closed by its × then
+    # comes back here unticked. Writing the state directly instead would be read on the
+    # submitting run too, and would overwrite the very ticks being submitted.
+    if st.session_state.get("pick_seen") != on:
+        st.session_state["pick_seen"] = on
+        st.session_state["pick_gen"] = st.session_state.get("pick_gen", 0) + 1
+    gen = st.session_state.get("pick_gen", 0)
 
     wanted = [(label, key) for label, key in PANEL_LABELS.items()
               if (group == "All" or panels.PANELS[key].group == group)
@@ -883,11 +880,23 @@ def _picker() -> None:
     if not wanted:
         return st.caption("No panel is called that.")
 
-    st.markdown('<div class="axn-pick"></div>', unsafe_allow_html=True)
-    for row in [wanted[i:i + 3] for i in range(0, len(wanted), 3)]:
-        for column, (label, key) in zip(st.columns(3), row):
-            column.checkbox(panels.PANELS[key].title, key=f"pick_{key}",
-                            on_change=_toggle, args=(label, key))
+    with st.form("axn_pick", border=False):
+        for row in [wanted[i:i + 3] for i in range(0, len(wanted), 3)]:
+            for column, (label, key) in zip(st.columns(3), row):
+                column.checkbox(panels.PANELS[key].title, value=label in on,
+                                key=f"pick_{gen}_{key}")
+        if not st.form_submit_button("Show these", use_container_width=True, type="primary"):
+            return
+
+    # Only the boxes on screen have a say: a panel filtered out of view keeps whatever it was,
+    # so narrowing to "Risk" and pressing this cannot quietly switch off everything else.
+    picks = set(st.session_state["globe_panels"])
+    for label, key in wanted:
+        picks.add(label) if st.session_state[f"pick_{gen}_{key}"] else picks.discard(label)
+    # Rebuilt by walking the registry rather than appending, so a panel switched off and on
+    # again comes back where it belongs instead of at the end — the grid never reshuffles.
+    st.session_state["globe_panels"] = [name for name in PANEL_LABELS if name in picks]
+    st.rerun()
 
 
 # Two to a row, with the way to add one standing in the last slot. A panel that throws takes
