@@ -17,7 +17,7 @@ from __future__ import annotations
 from datetime import datetime
 
 import requests
-import streamlit as st
+from .cache import remember
 
 HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; axn-pulse-news-monitor/1.0)"}
 API = "https://api.gdeltproject.org/api/v2/doc/doc"
@@ -26,7 +26,7 @@ API = "https://api.gdeltproject.org/api/v2/doc/doc"
 WORLD_QUERY = '("war" OR "sanctions" OR "ceasefire" OR "airstrike")'
 
 
-@st.cache_data(ttl=1800, show_spinner=False)
+@remember(1800)
 def timeline(country: str = "", kind: str = "tone", days: int = 7) -> tuple[list[dict], str]:
     """[{when, value}] and a note. kind is "tone" or "volume"."""
     query = f"sourcecountry:{country.upper()}" if country else WORLD_QUERY

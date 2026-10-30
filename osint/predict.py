@@ -17,7 +17,7 @@ from __future__ import annotations
 import json
 
 import requests
-import streamlit as st
+from .cache import remember
 
 from . import countries
 
@@ -36,7 +36,7 @@ SUBJECTS = (
 ).split()
 
 
-@st.cache_data(ttl=900, show_spinner=False)
+@remember(900)
 def _open_markets(pages: int = 3) -> list[dict]:
     """The busiest open markets, flattened to what a panel needs."""
     rows: list[dict] = []

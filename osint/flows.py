@@ -24,7 +24,7 @@ import time
 from datetime import date, timedelta
 
 import requests
-import streamlit as st
+from .cache import remember
 
 HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; axn-pulse-news-monitor/1.0)"}
 CHOKEPOINTS = ("https://services9.arcgis.com/weJ1QsnbMYJlCHdG/arcgis/rest/services/"
@@ -97,7 +97,7 @@ def _page(since: str) -> tuple[list[dict], str]:
     return rows, ""
 
 
-@st.cache_data(ttl=10800, show_spinner=False)
+@remember(10800)
 def chokepoints(days: int = 97) -> tuple[list[dict], str]:
     """[{name, ships, norm, change, level, tankers, containers, as_of, countries}] and a note.
 

@@ -12,7 +12,7 @@ beside a live index is not.
 from __future__ import annotations
 
 import requests
-import streamlit as st
+from .cache import remember
 
 from . import series
 
@@ -112,7 +112,7 @@ def country_index(cc: str) -> dict | None:
     return {"name": "Share prices", "unit": "", "worse": "down", **read} if read else None
 
 
-@st.cache_data(ttl=600, show_spinner=False)
+@remember(600)
 def crypto() -> list[dict]:
     """Bitcoin and ether from CoinGecko — the one live, keyless price feed left standing."""
     try:
@@ -135,7 +135,7 @@ def crypto() -> list[dict]:
     return out
 
 
-@st.cache_data(ttl=3600, show_spinner=False)
+@remember(3600)
 def fear_and_greed() -> dict | None:
     """Alternative.me's crypto fear-and-greed index, 0–100, with the word it gives the number.
 

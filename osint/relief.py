@@ -17,6 +17,8 @@ import base64
 import requests
 import streamlit as st
 
+from .cache import remember
+
 HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; axn-pulse-news-monitor/1.0)"}
 API = "https://hapi.humdata.org/api/v2"
 TIMEOUT = 15
@@ -43,7 +45,7 @@ def _ask(path: str, **params) -> list[dict]:
         return []
 
 
-@st.cache_data(ttl=86400, show_spinner=False)
+@remember(86400)
 def appeal(iso3: str) -> dict | None:
     """The most recent humanitarian appeal for a country: what it asked for and what it got."""
     if not iso3:
@@ -62,7 +64,7 @@ def appeal(iso3: str) -> dict | None:
     }
 
 
-@st.cache_data(ttl=86400, show_spinner=False)
+@remember(86400)
 def in_need(iso3: str) -> dict | None:
     """How many people the current response plan counts as needing help, by sector.
 

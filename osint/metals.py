@@ -15,7 +15,7 @@ Tuesday afternoon reading does not move again until Wednesday — a reference, n
 from __future__ import annotations
 
 import requests
-import streamlit as st
+from .cache import remember
 
 QUOTES = "https://forex-data-feed.swissquote.com/public-quotes/bboquotes/instrument/{}/USD"
 ECB = "https://data-api.ecb.europa.eu/service/data/EXR/D.{}.EUR.SP00.A"
@@ -30,7 +30,7 @@ SPOT = [("XAU", "Gold"), ("XAG", "Silver"), ("XPT", "Platinum"), ("XPD", "Pallad
 PAIRS = ["USD", "GBP", "JPY", "CHF", "CAD", "CNY"]
 
 
-@st.cache_data(ttl=900, show_spinner=False)
+@remember(900)
 def spot() -> list[dict]:
     """Gold, silver, platinum and palladium in dollars an ounce, mid of the quoted market."""
     out = []
@@ -56,7 +56,7 @@ def spot() -> list[dict]:
     return out
 
 
-@st.cache_data(ttl=3600, show_spinner=False)
+@remember(3600)
 def euro() -> list[dict]:
     """The ECB's daily reference rates, with the move since the previous working day."""
     try:

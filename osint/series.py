@@ -18,7 +18,6 @@ from __future__ import annotations
 import time
 
 import requests
-import streamlit as st
 
 HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; axn-pulse-news-monitor/1.0)"}
 CSV = "https://fred.stlouisfed.org/graph/fredgraph.csv"
@@ -32,12 +31,26 @@ TIMEOUT = 15
 _SHUT_UNTIL = 0.0
 _SHUT_FOR = 60
 
+# A reading that arrived stands for an hour; a reading that did not stands for two minutes.
+# One ttl for both is what turned a single slow moment at FRED into an hour of blank panels:
+# the empty answer was kept exactly as long as a real one, so the page went on insisting the
+# host was unreachable long after it had come back.
+_CACHE: dict[tuple[str, int], tuple[float, list]] = {}
+_GOOD_FOR = 3600
+_BAD_FOR = 120
 
-@st.cache_data(ttl=3600, show_spinner=False)
+
 def fred(series_id: str, points: int = 90) -> list[tuple[str, float]]:
     """The last `points` observations of a FRED series, oldest first, gaps dropped."""
     global _SHUT_UNTIL
-    if time.monotonic() < _SHUT_UNTIL:
+    now = time.monotonic()
+    held = _CACHE.get((series_id, points))
+    if held and now < held[0]:
+        return held[1]
+
+    # Nothing is remembered while the door is shut: the moment it opens the next caller should
+    # go and ask, rather than be handed the silence that shut it.
+    if now < _SHUT_UNTIL:
         return []
     try:
         reply = requests.get(CSV, params={"id": series_id}, headers=HEADERS, timeout=TIMEOUT)
@@ -48,6 +61,7 @@ def fred(series_id: str, points: int = 90) -> list[tuple[str, float]]:
         return []
     except requests.RequestException:
         # A refusal about this one series says nothing about the rest
+        _CACHE[(series_id, points)] = (now + _BAD_FOR, [])
         return []
     _SHUT_UNTIL = 0.0
 
@@ -61,7 +75,9 @@ def fred(series_id: str, points: int = 90) -> list[tuple[str, float]]:
             rows.append((day, float(value)))
         except ValueError:
             continue
-    return rows[-points:]
+    rows = rows[-points:]
+    _CACHE[(series_id, points)] = (now + (_GOOD_FOR if rows else _BAD_FOR), rows)
+    return rows
 
 
 def reading(series_id: str, points: int = 90) -> dict | None:

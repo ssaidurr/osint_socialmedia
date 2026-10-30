@@ -11,7 +11,7 @@ the year next to every figure instead.
 from __future__ import annotations
 
 import requests
-import streamlit as st
+from .cache import remember
 
 HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; axn-pulse-news-monitor/1.0)"}
 WB = "https://api.worldbank.org/v2"
@@ -33,7 +33,7 @@ INDICATORS = [
 ]
 
 
-@st.cache_data(ttl=DAY * 7, show_spinner=False)
+@remember(DAY * 7)
 def _codes() -> dict[str, str]:
     """ISO-2 → ISO-3, from the World Bank's own country list rather than a table kept here."""
     try:
@@ -50,7 +50,7 @@ def iso3(cc: str) -> str:
     return _codes().get((cc or "").upper(), "")
 
 
-@st.cache_data(ttl=DAY, show_spinner=False)
+@remember(DAY)
 def profile(cc: str) -> list[dict]:
     """The latest reading of each indicator for one country: [{name, value, unit, year}]."""
     if not cc:
@@ -75,7 +75,7 @@ def profile(cc: str) -> list[dict]:
     return out
 
 
-@st.cache_data(ttl=DAY, show_spinner=False)
+@remember(DAY)
 def displacement(cc: str, year: int = 0) -> dict | None:
     """How many people have left this country, and how many are displaced inside it.
 
@@ -105,7 +105,7 @@ def displacement(cc: str, year: int = 0) -> dict | None:
     return None
 
 
-@st.cache_data(ttl=DAY, show_spinner=False)
+@remember(DAY)
 def biggest_origins(limit: int = 8) -> tuple[list[dict], int]:
     """The countries most people have fled, and the worldwide refugee total behind them."""
     from datetime import date

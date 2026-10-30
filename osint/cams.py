@@ -23,6 +23,8 @@ import time
 import requests
 import streamlit as st
 
+from .cache import remember
+
 WEBCAMS = "https://api.windy.com/webcams/api/v3/webcams"
 JAMCAMS = "https://api.tfl.gov.uk/Place/Type/JamCam"
 CALTRANS = "https://cwwp2.dot.ca.gov/data/d{d}/cctv/cctvStatusD{d:0>2}.json"
@@ -100,7 +102,7 @@ def key() -> str | None:
         return None
 
 
-@st.cache_data(ttl=300, show_spinner=False)
+@remember(300)
 def _ask(params: tuple) -> list[dict]:
     """One call to Windy. Cached for five minutes because the image links are signed and the
     free tier's signature dies after ten — a longer cache would serve pictures that 401."""
@@ -193,7 +195,7 @@ def _spread(cams: list[dict], limit: int) -> list[dict]:
     return cams[::step][:limit]
 
 
-@st.cache_data(ttl=300, show_spinner=False)
+@remember(300)
 def _london(limit: int = 6) -> list[dict]:
     """Transport for London's 890 traffic cameras."""
     rows = _fetch(JAMCAMS) or []
@@ -211,7 +213,7 @@ def _london(limit: int = 6) -> list[dict]:
     return _spread(cams, limit)
 
 
-@st.cache_data(ttl=300, show_spinner=False)
+@remember(300)
 def _california(limit: int = 6) -> list[dict]:
     """Caltrans' Los Angeles cameras, about 600 of them. District 7 only: the other district
     files are served slowly enough to hold a panel open, and one city fewer beats a page that
@@ -230,7 +232,7 @@ def _california(limit: int = 6) -> list[dict]:
     return _spread(cams, limit)
 
 
-@st.cache_data(ttl=300, show_spinner=False)
+@remember(300)
 def _singapore(limit: int = 6) -> list[dict]:
     """Singapore's expressway cameras, published by the Land Transport Authority."""
     items = (_fetch(SINGAPORE) or {}).get("items") or []

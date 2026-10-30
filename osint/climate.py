@@ -12,7 +12,7 @@ any of them.
 from __future__ import annotations
 
 import requests
-import streamlit as st
+from .cache import remember
 
 HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; axn-pulse-news-monitor/1.0)"}
 TIMEOUT = 15
@@ -34,7 +34,7 @@ def band(aqi: float) -> str:
     return next(words for limit, words in BANDS if aqi <= limit)
 
 
-@st.cache_data(ttl=3600, show_spinner=False)
+@remember(3600)
 def air(lat: float, lng: float) -> dict | None:
     """{aqi, band, pm2_5, pm10, no2, ozone} for one place, or None if the feed is out."""
     try:
@@ -53,7 +53,7 @@ def air(lat: float, lng: float) -> dict | None:
             "no2": now.get("nitrogen_dioxide"), "ozone": now.get("ozone")}
 
 
-@st.cache_data(ttl=3600, show_spinner=False)
+@remember(3600)
 def watched() -> list[dict]:
     """Air quality in the cities worth watching, worst first.
 
@@ -90,7 +90,7 @@ def watched() -> list[dict]:
     return sorted(out, key=lambda row: -row["aqi"])
 
 
-@st.cache_data(ttl=86400, show_spinner=False)
+@remember(86400)
 def carbon() -> dict | None:
     """NOAA's global mean CO2: {ppm, a_year_ago, as_of}.
 

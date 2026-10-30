@@ -21,7 +21,7 @@ import math
 
 import pandas as pd
 import requests
-import streamlit as st
+from .cache import remember
 
 from . import feeds, geo, world
 
@@ -30,7 +30,7 @@ HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; axn-pulse-news-monitor/1.0)"}
 WEIGHTS = {"displaced": 0.40, "hazard": 0.20, "alarm": 0.25, "volume": 0.15}
 
 
-@st.cache_data(ttl=86400, show_spinner=False)
+@remember(86400)
 def _populations() -> dict[str, float]:
     """Every country's population in one call, so the displaced share can be worked out."""
     try:
