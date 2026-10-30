@@ -20,6 +20,7 @@ right now" rather than as an error.
 """
 from __future__ import annotations
 
+import time
 from datetime import date, timedelta
 
 import requests
@@ -51,56 +52,103 @@ NEARBY = {
 }
 
 
-@st.cache_data(ttl=10800, show_spinner=False)
-def chokepoints(days: int = 28) -> tuple[list[dict], str]:
-    """[{name, ships, before, change, tankers, containers, as_of}] and a note if it is out.
+def _page(since: str) -> tuple[list[dict], str]:
+    """Every daily row since `since`, walked a page at a time.
 
-    `change` compares the most recent week against the week before it, so a one-quiet-Sunday
-    wobble does not read as a blockade.
+    The service caps a single answer at a thousand rows, and a quarter of a year across twenty
+    waterways is twice that, so it has to be asked for in pieces. It says when it has held
+    some back; when it stops saying so, we have them all.
+    """
+    rows, offset = [], 0
+    for _ in range(3):                      # three pages hold a quarter of a year comfortably
+        body = None
+        for attempt in range(3):
+            # The host refuses about a quarter of well-formed queries, at random — measured,
+            # not guessed. One try in three pages would fail outright a fifth of the time, so
+            # each page gets three attempts, which puts the whole fetch under one in twenty.
+            try:
+                reply = requests.get(CHOKEPOINTS, params={
+                    "where": f"date >= DATE '{since}'",
+                    "outFields": "date,portname,n_total,n_tanker,n_container",
+                    # Newest first, so that a page we never get costs us the far end of the
+                    # baseline rather than the week we are measuring. Ascending would lose the
+                    # recent days silently and quietly compute the wrong thing.
+                    "orderByFields": "date DESC",
+                    "f": "json", "returnGeometry": "false",
+                    "resultRecordCount": 1000, "resultOffset": offset},
+                    headers=HEADERS, timeout=TIMEOUT)
+                reply.raise_for_status()
+                body = reply.json()
+            except (requests.RequestException, ValueError):
+                body = None
+            if body is not None and "error" not in body:
+                break
+            body = None
+            if attempt < 2:
+                time.sleep(1.5)
+        if body is None:
+            return rows, "" if rows else "IMF PortWatch is not answering."
+
+        page = [f["attributes"] for f in body.get("features", []) if f.get("attributes")]
+        rows += page
+        if not body.get("exceededTransferLimit") or not page:
+            break
+        offset += len(page)
+    return rows, ""
+
+
+@st.cache_data(ttl=10800, show_spinner=False)
+def chokepoints(days: int = 97) -> tuple[list[dict], str]:
+    """[{name, ships, norm, change, level, tankers, containers, as_of, countries}] and a note.
+
+    A waterway is measured against itself: the last seven days against the ninety before them.
+    Comparing straits to each other says only which is busier, which never changes; comparing
+    a strait to its own habit is what tells you something happened. Ninety days rather than a
+    fortnight because a fortnight still carries a holiday or a storm in it.
     """
     since = (date.today() - timedelta(days=days)).isoformat()
-    try:
-        reply = requests.get(CHOKEPOINTS, params={
-            "where": f"date >= DATE '{since}'",
-            "outFields": "date,portname,n_total,n_tanker,n_container",
-            # the service refuses anything above its own maxRecordCount of 1000, and a month
-            # of roughly twenty chokepoints fits inside that with room to spare
-            "f": "json", "returnGeometry": "false", "resultRecordCount": 1000},
-            headers=HEADERS, timeout=TIMEOUT)
-        reply.raise_for_status()
-        body = reply.json()
-    except (requests.RequestException, ValueError):
-        return [], "IMF PortWatch is not answering."
-    if "error" in body:
-        return [], "IMF PortWatch turned the query away."
-
-    rows = [f["attributes"] for f in body.get("features", []) if f.get("attributes")]
+    rows, note = _page(since)
     if not rows:
-        return [], "PortWatch has nothing for the last few weeks yet."
+        return [], note or "PortWatch has nothing for the last few weeks yet."
 
-    newest = max(row["date"] for row in rows)
-    # The dates are plain YYYY-MM-DD strings, so string order is date order
-    week = sorted({row["date"] for row in rows}, reverse=True)[:7]
-    before = sorted({row["date"] for row in rows}, reverse=True)[7:14]
+    days_seen = sorted({row["date"] for row in rows}, reverse=True)
+    week, baseline = set(days_seen[:7]), set(days_seen[7:97])
+    newest = days_seen[0]
 
     out = []
     for name in sorted({row["portname"] for row in rows}):
         mine = [row for row in rows if row["portname"] == name]
         recent = [row["n_total"] or 0 for row in mine if row["date"] in week]
-        earlier = [row["n_total"] or 0 for row in mine if row["date"] in before]
+        earlier = [row["n_total"] or 0 for row in mine if row["date"] in baseline]
         if not recent:
             continue
         now = sum(recent) / len(recent)
-        then = (sum(earlier) / len(earlier)) if earlier else now
+        norm = (sum(earlier) / len(earlier)) if earlier else now
+        change = ((now - norm) / norm * 100) if norm else 0.0
         last = max(mine, key=lambda row: row["date"])
         out.append({
             "name": name,
             "ships": round(now, 1),
-            "before": round(then, 1),
-            "change": ((now - then) / then * 100) if then else 0.0,
+            "norm": round(norm, 1),
+            "change": change,
+            # Three weeks is the least that can be called a habit. With less than that the
+            # figure still shows, ungraded, rather than being dressed up as a verdict.
+            "level": level(change) if len(earlier) >= 21 else "",
             "tankers": last.get("n_tanker") or 0,
             "containers": last.get("n_container") or 0,
             "as_of": last["date"],
             "countries": NEARBY.get(name, ()),
         })
-    return sorted(out, key=lambda row: -row["ships"]), f"newest day {newest}"
+    return sorted(out, key=lambda row: row["change"]), f"newest day {newest}"
+
+
+# How far below its own habit a waterway has to fall before it is worth a word. Only falls are
+# graded: traffic above the norm is a busy week, not a disruption.
+def level(change: float) -> str:
+    if change <= -50:
+        return "critical"
+    if change <= -25:
+        return "elevated"
+    if change <= -10:
+        return "moderate"
+    return "normal"

@@ -812,8 +812,8 @@ scope = panels.Scope(
 PANEL_LABELS = {f"{p.group} · {p.title}": key for key, p in panels.PANELS.items()}
 OPENING = ["News · Live intelligence", "News · Threat timeline", "Risk · Instability",
            "Money · News ↔ markets", "Live · Live news TV", "Live · Live webcams",
-           "Money · Markets", "Money · Predictions", "Risk · Live hazards",
-           "News · What it is about"]
+           "Money · Markets", "Money · Metals & materials", "Money · Predictions",
+           "Risk · Live hazards", "News · What it is about"]
 st.session_state.setdefault("globe_panels", OPENING)
 
 # A set of panels travels in the link — ?panels=markets,macro, ?panels=all, ?panels=none — so

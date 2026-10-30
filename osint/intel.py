@@ -29,6 +29,9 @@ THEMES: dict[str, str] = {
     "Sanctions": r"sanction|embargo|tariff|export control|blacklist|frozen assets|"
                  r"trade ban|restrictions? on",
     "Unrest": r"protest|riot|demonstration|clash(?:es)?|uprising|coup|strike action|unrest",
+    "AI & tech": r"\bai\b|artificial intelligence|machine learning|chatbot|openai|anthropic|"
+                 r"nvidia|semiconductor|\bchips?\b|data cent(?:re|er)|algorithm|\bllm\b|"
+                 r"quantum comput|robotics?",
 }
 
 

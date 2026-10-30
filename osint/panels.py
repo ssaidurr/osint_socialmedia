@@ -845,10 +845,31 @@ def since(stamp) -> str:
     return f"{int(gap // 86400)}d"
 
 
+def one_each(rows: pd.DataFrame, limit: int) -> list:
+    """One row per story. A forum thread arrives as a dozen comments quoting the same line,
+    and a panel that shows eight of them has shown you one headline eight times."""
+    import re
+
+    seen, kept = set(), []
+    for _, row in rows.iterrows():
+        title = str(row.get("title") or "")
+        # Strip what varies and keep what repeats: the commenter's name changes, the quoted
+        # headline does not.
+        body = re.sub(r"^/u/\S+\s+on\s+", "", title, flags=re.I)
+        key = re.sub(r"[^a-z0-9]+", "", body.lower())[:60]
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        kept.append(row)
+        if len(kept) == limit:
+            break
+    return kept
+
+
 def wire(rows: pd.DataFrame, limit: int = 8) -> str:
     """Headlines as they come off the wire: who filed it, how long ago, and how bad it reads."""
     cells = []
-    for _, row in rows.head(limit).iterrows():
+    for row in one_each(rows, limit):
         sev = int(row.get("severity") or 0)
         tone = "bad" if sev >= 4 else "warn" if sev >= 2 else ""
         when = since(row.get("ts"))
@@ -954,11 +975,65 @@ def _correlate(scope: Scope) -> None:
     source("This monitor's own collection · market series from FRED")
 
 
+METAL_TIP = ("Spot metal is the mid of Swissquote's public two-sided quote — a dealable "
+             "market price, not the LBMA benchmark fix, so it moves all day and will not "
+             "match the afternoon fix to the cent. The feed carries no previous close, which "
+             "is why these four show a level and no move. Copper and aluminium are monthly "
+             "IMF averages and do carry one. Euro rates are the ECB's daily reference rates, "
+             "set once each working day at about 16:00 CET.")
+
+
+@panel("materials", "Metals & materials", "Money", height=360)
+def _materials(scope: Scope) -> None:
+    from . import metals, money
+
+    st.markdown(head("Metals & materials", status=LIVE, shut=scope.shut(), tip=METAL_TIP),
+                unsafe_allow_html=True)
+    tab = st.radio("Table", ["Commodities", "EUR FX"], key="axn_metal", horizontal=True,
+                   label_visibility="collapsed")
+
+    if tab == "Commodities":
+        precious = metals.spot()
+        # The four that are priced by the ounce, then the two that are priced by the tonne —
+        # different markets, so they are shown as separate rows rather than one ranking
+        if precious:
+            st.markdown(tiles([{"name": row["name"], "value": row["value"], "unit": "$"}
+                               for row in precious], sparks=False), unsafe_allow_html=True)
+        else:
+            nothing("The spot metal feed is not answering.")
+        base = [row for row in money.metals() if row["name"] in ("Copper", "Aluminium")]
+        if base:
+            st.markdown(head("Base metals", "monthly average",
+                             status=freshness(base)) + tiles(base), unsafe_allow_html=True)
+        return source("Swissquote spot · IMF monthly averages via FRED")
+
+    rates = metals.euro()
+    if not rates:
+        return nothing("The ECB reference rates are not answering.")
+    cells = []
+    for row in rates:
+        moved = row.get("change")
+        # A currency pair moves in its own units, not in per cent of itself: EUR/JPY shifting
+        # 0.06 is six sen, and writing it as a percentage buries that.
+        way = "flat" if moved is None or abs(moved) < 5e-5 else ("up" if moved > 0 else "down")
+        digits = 2 if row["value"] > 10 else 4
+        cells.append(
+            f'<div><span class="t">{escape(row["name"])}</span>'
+            f'<span class="v">{row["value"]:,.{digits}f}</span>'
+            + (f'<span class="d {way}">{moved:+.4f}</span>' if moved is not None else "")
+            + "</div>")
+    st.markdown(f'<div class="axn-tiles">{"".join(cells)}</div>', unsafe_allow_html=True)
+    source("ECB daily reference rates · change against the previous working day")
+
+
 # ─── Trade, air and relief ────────────────────────────────────────────────────
-CHOKE_TIP = ("IMF PortWatch, from AIS transponder data. Every figure is a change against the "
-             "fortnight before, never one chokepoint against another: a ship with its "
-             "transponder off is not counted, which is why PortWatch's Hormuz figure sits in "
-             "single digits though the strait is one of the busiest in the world.")
+CHOKE_TIP = ("IMF PortWatch, from AIS transponder data. Each waterway is measured against "
+             "itself — the last seven days against the ninety before them — never against "
+             "another waterway: comparing straits says only which is busier, which never "
+             "changes. A ship with its transponder off is not counted, which is why "
+             "PortWatch's Hormuz figure sits in single digits though the strait is one of the "
+             "busiest in the world. A level is only graded where there are at least three "
+             "weeks of baseline behind it.")
 
 
 @panel("chokepoints", "Trade chokepoints", "Risk", height=340)
@@ -976,11 +1051,19 @@ def _chokepoints(scope: Scope) -> None:
         return nothing(f"No chokepoint is reached through {scope.name}." if not scope.worldwide
                        else note or "IMF PortWatch is not answering.")
 
-    # Ordered by how much each has moved, because a strait behaving normally is not news
-    moved = sorted(rows, key=lambda row: -abs(row["change"]))[:9]
-    st.markdown(bars([(row["name"], abs(row["change"]),
-                       f'{row["change"]:+.0f}% · {row["ships"]:.0f}/day') for row in moved]),
-                unsafe_allow_html=True)
+    # Already ordered by how far below its own habit each has fallen: a strait behaving
+    # normally is not news, and the one that has quietly emptied is the whole point
+    cells = []
+    for row in rows[:8]:
+        tone = {"critical": "bad", "elevated": "warn", "moderate": "warn"}.get(row["level"], "")
+        cells.append(
+            f'<div class="item {tone}">'
+            f'<div class="meta"><span>{escape(row["name"])}</span>'
+            f'<span>{row["level"] or "ungraded"}</span></div>'
+            f'<span>{row["change"]:+.0f}% against its own norm · '
+            f'{row["ships"]:.1f} a day, usually {row["norm"]:.1f}</span></div>')
+    st.markdown(f'<div class="axn-wire">{"".join(cells)}</div>', unsafe_allow_html=True)
+    source(f"{len(rows)} waterways · IMF PortWatch")
 
 
 @panel("air", "Air & atmosphere", "Risk", height=390)

@@ -274,36 +274,43 @@ BRAND = """
      of them behind a click. Scoped by widget key so no other radio on the page is touched. */
   .st-key-axn_tv [role="radiogroup"],
   .st-key-axn_intel [role="radiogroup"],
+  .st-key-axn_metal [role="radiogroup"],
   .st-key-axn_cam_region [role="radiogroup"] {
     display: flex; flex-wrap: wrap; gap: .25rem; margin-bottom: .5rem;
   }
   .st-key-axn_tv [role="radiogroup"] label,
-  .st-key-axn_intel [role="radiogroup"] label,
+  .st-key-axn_intel [role="radiogroup"],
+  .st-key-axn_metal [role="radiogroup"] label,
   .st-key-axn_cam_region [role="radiogroup"] label {
     background: #12151a; border: 1px solid #23272e; border-radius: 5px;
     padding: .15rem .45rem; margin: 0; min-height: 0; cursor: pointer;
   }
   .st-key-axn_tv [role="radiogroup"] label > div:first-child,
-  .st-key-axn_intel [role="radiogroup"] label > div:first-child,
+  .st-key-axn_intel [role="radiogroup"],
+  .st-key-axn_metal [role="radiogroup"] label > div:first-child,
   .st-key-axn_cam_region [role="radiogroup"] label > div:first-child {
     display: none;  /* the dot: the chip already says which one is on */
   }
   .st-key-axn_tv [role="radiogroup"] label p,
-  .st-key-axn_intel [role="radiogroup"] label p,
+  .st-key-axn_intel [role="radiogroup"],
+  .st-key-axn_metal [role="radiogroup"] label p,
   .st-key-axn_cam_region [role="radiogroup"] label p {
     font-family: "Geist Mono", ui-monospace, monospace; font-size: .55rem;
     letter-spacing: .1em; text-transform: uppercase; color: #8a919c; margin: 0;
   }
   .st-key-axn_tv [role="radiogroup"] label:hover p,
-  .st-key-axn_intel [role="radiogroup"] label:hover p,
+  .st-key-axn_intel [role="radiogroup"],
+  .st-key-axn_metal [role="radiogroup"] label:hover p,
   .st-key-axn_cam_region [role="radiogroup"] label:hover p { color: #e6e9ee; }
   .st-key-axn_tv [role="radiogroup"] label:has(input:checked),
-  .st-key-axn_intel [role="radiogroup"] label:has(input:checked),
+  .st-key-axn_intel [role="radiogroup"],
+  .st-key-axn_metal [role="radiogroup"] label:has(input:checked),
   .st-key-axn_cam_region [role="radiogroup"] label:has(input:checked) {
     background: #f8717118; border-color: #f8717155;
   }
   .st-key-axn_tv [role="radiogroup"] label:has(input:checked) p,
-  .st-key-axn_intel [role="radiogroup"] label:has(input:checked) p,
+  .st-key-axn_intel [role="radiogroup"],
+  .st-key-axn_metal [role="radiogroup"] label:has(input:checked) p,
   .st-key-axn_cam_region [role="radiogroup"] label:has(input:checked) p {
     color: #f87171;
   }
