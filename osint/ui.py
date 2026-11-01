@@ -133,9 +133,6 @@ BRAND = """
   [data-testid="stIconMaterial"], .material-symbols-rounded, span[class*="material-symbols"] {
     font-family: "Material Symbols Rounded" !important;
   }
-  /* The world map is still being shown around: reachable at /World_map, not yet advertised.
-     Delete this rule to put it back in the sidebar. */
-  [data-testid="stSidebarNav"] a[href$="/World_map"] { display: none; }
 
   .brand { display: flex; align-items: center; gap: .5rem; margin: 0 0 .15rem; color: #eceef1; }
   .brand-name { font-size: 1.02rem; font-weight: 500; letter-spacing: -.02em; }
