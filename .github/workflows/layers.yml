@@ -42,7 +42,7 @@ jobs:
       - name: Commit what changed
         run: |
           git config user.name "axn-pulse-bot"
-          git config user.email "mssaidurr@gmail.com"
+          git config user.email "info@synergyaxn.com"
           git add osint/data
           # Nothing changed is the normal case for a quiet month, not a failure
           if git diff --cached --quiet; then
@@ -50,4 +50,6 @@ jobs:
             exit 0
           fi
           git commit -m "Refresh the map layers from their sources"
+          # Two jobs and a laptop all push here, so take whatever landed first
+          git pull --rebase
           git push

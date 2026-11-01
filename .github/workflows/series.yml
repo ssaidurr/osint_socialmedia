@@ -1,0 +1,51 @@
+name: Refresh economic series
+
+# FRED answers a laptop and a GitHub runner, and does not answer Streamlit Cloud: the deployed
+# app times out on every request and every money panel stands empty. So the series ride in the
+# repo the way the map layers do. This fetches them each morning and commits what moved; the
+# dashboard then reads a file and makes no outbound call for any of it.
+#
+# Daily rather than monthly, because unlike a map layer these are the numbers themselves.
+
+on:
+  schedule:
+    - cron: "20 6 * * *" # 06:20 UTC, after the US close has settled
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: axn-series
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      - run: pip install requests
+
+      - name: Fetch
+        run: python tools/build_series.py
+
+      - name: Commit what changed
+        run: |
+          git config user.name "axn-pulse-bot"
+          git config user.email "info@synergyaxn.com"
+          git add osint/data/series.json
+          # A weekend or a holiday moves nothing, which is normal rather than a failure
+          if git diff --cached --quiet; then
+            echo "No series moved today."
+            exit 0
+          fi
+          git commit -m "Refresh the economic series from FRED"
+          # Two jobs and a laptop all push here, so take whatever landed first
+          git pull --rebase
+          git push

@@ -21,6 +21,8 @@ fi
 cd "$HERE" || exit 1
 git add -A
 git commit -qm "$MESSAGE" || echo "  ssaidurr/osint_socialmedia: nothing new to commit"
+# The layer and series jobs commit here too, so take whatever landed while we were working
+git pull --rebase -q origin main || { echo "  could not rebase onto ssaidurr/osint_socialmedia"; exit 1; }
 git push -q origin main || { echo "  push failed for ssaidurr/osint_socialmedia"; exit 1; }
 echo "  ssaidurr/osint_socialmedia    → $(git rev-parse --short HEAD)"
 
@@ -45,6 +47,7 @@ rsync -a --delete \
 cd "$MIRROR" || exit 1
 git add -A
 git commit -qm "$MESSAGE" || echo "  BizIncorporated/newsanalytics: nothing new to commit"
+git pull --rebase -q origin main || { echo "  could not rebase onto BizIncorporated/newsanalytics"; exit 1; }
 git push -q origin main || { echo "  push failed for BizIncorporated/newsanalytics"; exit 1; }
 echo "  BizIncorporated/newsanalytics → $(git rev-parse --short HEAD)"
 

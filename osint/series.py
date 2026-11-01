@@ -15,7 +15,10 @@ Two things this module insists on:
 """
 from __future__ import annotations
 
+import json
 import time
+from functools import lru_cache
+from pathlib import Path
 
 import requests
 
@@ -40,8 +43,39 @@ _GOOD_FOR = 3600
 _BAD_FOR = 120
 
 
+@lru_cache(maxsize=1)
+def _shipped() -> dict[str, list[tuple[str, float]]]:
+    """The series tools/build_series.py fetched and committed.
+
+    FRED answers a laptop and a GitHub runner and does not answer Streamlit Cloud, where every
+    request times out and every money panel stands empty. So the series ride in the repo, like
+    the map layers do, and the deployed app reads a file instead of asking. A day-old daily
+    series is worth more than a live one that never arrives.
+    """
+    path = Path(__file__).resolve().parent / "data" / "series.json"
+    try:
+        body = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return {}
+    return {name: [(day, value) for day, value in rows]
+            for name, rows in (body.get("series") or {}).items()}
+
+
+def built_on() -> str:
+    """The day the shipped series were fetched, or "" if none are shipped."""
+    path = Path(__file__).resolve().parent / "data" / "series.json"
+    try:
+        return json.loads(path.read_text()).get("built", "")
+    except (OSError, ValueError):
+        return ""
+
+
 def fred(series_id: str, points: int = 90) -> list[tuple[str, float]]:
     """The last `points` observations of a FRED series, oldest first, gaps dropped."""
+    rows = _shipped().get(series_id)
+    if rows:
+        return rows[-points:]
+
     global _SHUT_UNTIL
     now = time.monotonic()
     held = _CACHE.get((series_id, points))

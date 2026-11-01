@@ -308,7 +308,7 @@ demo_access:
   require: true
   trial_days: 14
   worksheet: users
-  contact_email: "digitalmarketing.bizinc@gmail.com"   # shown when a trial ends — put the address people should write to
+  contact_email: "info@synergyaxn.com"   # shown when a trial ends — put the address people should write to
   admin_emails:               # these addresses walk straight in: no form, no trial, no sheet row
     - info@synergyaxn.com     # first one here is also the name the ?admin=<key> link signs in as
     - nafiz.e.chy@gmail.com
