@@ -22,7 +22,7 @@ from .cache import remember
 HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; axn-pulse-news-monitor/1.0)"}
 API = "https://hapi.humdata.org/api/v2"
 TIMEOUT = 15
-DEFAULT_CONTACT = "axn-pulse:mssaidurr@gmail.com"
+DEFAULT_CONTACT = "axn-pulse:info@synergyaxn.com"
 
 
 def _identifier() -> str:
