@@ -413,6 +413,24 @@ BRAND = """
     background: #5ee6ff22 !important; border-color: #5ee6ff !important;
   }
 
+  /* The layer presets over the map: the same chip the strips elsewhere use, except that
+     these are buttons — the reader is asking for something, not choosing a tab. */
+  [class*="st-key-preset_"] button {
+    background: #12151a !important; border: 1px solid #23272e !important;
+    color: #8a919c !important; border-radius: 5px !important; padding: .2rem .5rem !important;
+    min-height: 0 !important;
+    font-family: "Geist Mono", ui-monospace, monospace; font-size: .58rem;
+    letter-spacing: .12em; text-transform: uppercase;
+  }
+  [class*="st-key-preset_"] button:hover {
+    color: #e6e9ee !important; border-color: #5ee6ff55 !important;
+  }
+  /* The one that matches what is on the map */
+  [class*="st-key-preset_"] button[kind="primary"] {
+    background: #5ee6ff14 !important; border-color: #5ee6ff66 !important;
+    color: #5ee6ff !important;
+  }
+
   /* Row badges: what a headline's provenance looks like at a glance. */
   .axn-tags { display: flex; flex-wrap: wrap; gap: .25rem; margin-top: .3rem; }
   .axn-tags span {

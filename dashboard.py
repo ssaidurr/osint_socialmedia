@@ -305,6 +305,34 @@ SWATCH["Undersea cables"] = "rgba(94,230,255,0.6)"      # a line, not a dot: it 
 # Which layers are on is the map's own business: the panel inside it sends the list back and we
 # remember it here. Day & night starts off — it is the one layer that makes half the map harder
 # to read before you have asked it to.
+# ─── The four ways in from the website, and one more ──────────────────────────
+# A link from synergyaxn.com says which question the reader arrived with, and the map opens
+# already answering it: ?layers=security ticks the security layers and nothing else. Without
+# one the map opens as it always has, on DEFAULT_LAYERS — a bare link must not be a surprise.
+#
+# The groups overlap on purpose. Armed conflict is news to one reader and security to another,
+# and a layer belonging to two questions is not a mistake to be tidied away.
+PRESETS = {
+    "event":    ("Event", ["quakes", "gdacs", "eonet", "outbreaks", "airemerg", "outages"]),
+    "news":     ("News", ["news", "protests", "conflict"]),
+    "security": ("Security", ["conflict", "milair", "bases", "nuclear", "chokepoints",
+                              "cables", "sats"]),
+    "weather":  ("Weather", ["clouds", "rain", "wind", "sun"]),
+    # The rest of what is built into the repo: none of it fits the four names above, and
+    # leaving it reachable only one tick at a time made it effectively invisible.
+    "infrastructure": ("Infrastructure", ["ports", "refineries", "mines", "datacenters",
+                                          "exchanges", "banks", "renewables", "spaceports",
+                                          "happiness"]),
+}
+
+# The link only speaks when it changes; after that the map's own ticks decide, so a reader who
+# arrived on ?layers=news can turn one off without it springing back on the next rerun.
+arrived = str(st.query_params.get("layers", "")).strip().lower()
+if arrived and arrived != st.session_state.get("layers_from_link"):
+    st.session_state["layers_from_link"] = arrived
+    if arrived in PRESETS:
+        st.session_state["globe_layers"] = list(PRESETS[arrived][1])
+
 DEFAULT_LAYERS = ["News by city", "Earthquakes", "Disaster alerts", "Wildfires & storms"]
 keys = set(st.session_state.get("globe_layers", [LAYERS[n] for n in DEFAULT_LAYERS]))
 
@@ -596,6 +624,18 @@ picked = st.session_state.get("globe_pick")
 # a column twice as tall as its neighbour makes the page look broken rather than full.
 PANEL_HEIGHT = 820
 GLOBE_HEIGHT = PANEL_HEIGHT - 112        # the head line and the source caption take the rest
+
+# The presets, as a row of buttons over the map. One lights up only while the ticks are
+# exactly its own: hand-pick an extra layer and it goes out, because a lit chip that no longer
+# describes the map would be worse than no chip at all.
+chip_cols = st.columns(len(PRESETS))
+for (slug, (label, wanted)), column in zip(PRESETS.items(), chip_cols):
+    exact = set(wanted) == keys
+    if column.button(label, key=f"preset_{slug}", width="stretch",
+                     type="primary" if exact else "secondary",
+                     help=f"Show the {label.lower()} layers and nothing else"):
+        st.session_state["globe_layers"] = list(wanted)
+        st.rerun()
 
 left, right = st.columns([1.9, 1])
 
