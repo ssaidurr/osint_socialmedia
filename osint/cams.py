@@ -17,12 +17,16 @@ pretending the world has six cameras in it.
 """
 from __future__ import annotations
 
+import json
 import os
 import time
+from functools import lru_cache
+from pathlib import Path
 
 import requests
 import streamlit as st
 
+from . import http
 from .cache import remember
 
 WEBCAMS = "https://api.windy.com/webcams/api/v3/webcams"
@@ -180,12 +184,39 @@ CAM_TIMEOUT = 8
 
 
 def _fetch(url: str):
+    """`timeout` alone is not enough here: it bounds the silence between two bytes, not the
+    exchange, and a road authority that dribbles a megabyte satisfies it indefinitely. See
+    osint/http.py — this is the call that taught us the difference."""
+    return http.json(url, CAM_TIMEOUT)
+
+
+# ─── The catalogue that ships with the repo ──────────────────────────────────
+# Which cameras exist changes about as often as a road does, and reading the lists costs the
+# page far more than it is worth: Caltrans' file alone is 1.8 MB at ~48 kB/s. So the lists are
+# built on a schedule by tools/build_cams.py and committed. The picture is not: each row keeps
+# the camera's own address, stamped below, so the catalogue may be a month old while the image
+# is five minutes old.
+
+CATALOGUE = Path(__file__).resolve().parent / "data" / "cams.json"
+
+
+@lru_cache(maxsize=1)
+def _catalogue() -> dict:
     try:
-        reply = requests.get(url, timeout=CAM_TIMEOUT,
-                             headers={"User-Agent": "axn-pulse-news-monitor/1.0"})
-        return reply.json() if reply.status_code == 200 else None
-    except Exception:
-        return None
+        return json.loads(CATALOGUE.read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def built_on() -> str:
+    """The day the shipped camera lists were last rebuilt, for the panel to own up to."""
+    return str(_catalogue().get("built", ""))
+
+
+def _stamped(rows: list[dict], limit: int) -> list[dict]:
+    """Shipped rows, given the cache-buster the live ones get and the shape the panel wants."""
+    return [dict(row, thumb=f'{row["thumb"]}?t={_stamp()}', live="", as_of="")
+            for row in _spread(rows, limit)]
 
 
 def _spread(cams: list[dict], limit: int) -> list[dict]:
@@ -197,7 +228,10 @@ def _spread(cams: list[dict], limit: int) -> list[dict]:
 
 @remember(300)
 def _london(limit: int = 6) -> list[dict]:
-    """Transport for London's 890 traffic cameras."""
+    """Transport for London's 890 traffic cameras, from the shipped list where there is one."""
+    shipped = (_catalogue().get("regions") or {}).get("London")
+    if shipped:
+        return _stamped(shipped, limit)
     rows = _fetch(JAMCAMS) or []
     cams = []
     for row in rows:
@@ -215,9 +249,16 @@ def _london(limit: int = 6) -> list[dict]:
 
 @remember(300)
 def _california(limit: int = 6) -> list[dict]:
-    """Caltrans' Los Angeles cameras, about 600 of them. District 7 only: the other district
-    files are served slowly enough to hold a panel open, and one city fewer beats a page that
-    waits on a road authority."""
+    """Caltrans' Los Angeles cameras, about 600 of them, from the shipped list where there is
+    one. District 7 only: the other district files are served slowly enough to hold a panel
+    open, and one city fewer beats a page that waits on a road authority.
+
+    The live path below is the fallback, and it is a poor one — the file is 1.8 MB at about
+    fifty kilobytes a second, so it will usually run out its budget and come back empty. That
+    is the honest outcome when the shipped catalogue is missing; it is not the normal one."""
+    shipped = (_catalogue().get("regions") or {}).get("California")
+    if shipped:
+        return _stamped(shipped, limit)
     cams = []
     for row in (_fetch(CALTRANS.format(d=7)) or {}).get("data", []):
         cctv = row.get("cctv") or {}

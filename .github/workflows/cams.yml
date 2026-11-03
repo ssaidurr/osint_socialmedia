@@ -1,0 +1,56 @@
+name: Refresh webcam catalogue
+
+# The open camera lists are facts about where cameras stand, not feeds, so they ship in the repo
+# the way the map layers do. The reason is cost rather than tidiness: Caltrans publishes its Los
+# Angeles cameras as one 1.8 MB file served at about fifty kilobytes a second — thirty-eight
+# seconds on a good run, measured once at a hundred and forty-eight — and Streamlit draws a page
+# in one pass, so that one panel held the whole dashboard open for as long as it took.
+#
+# Weekly rather than monthly: a camera taken out of service shows as a broken picture until the
+# next build, and a week of that is a nuisance where a month would be an embarrassment.
+#
+# The pictures themselves are never committed. Each row keeps the camera's own address and the
+# browser loads it live, so the list is a week old while the image is five minutes old.
+
+on:
+  schedule:
+    - cron: "40 5 * * 0" # 05:40 UTC on Sundays
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: axn-cams
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      - run: pip install requests
+
+      - name: Fetch
+        run: python tools/build_cams.py
+
+      - name: Commit what changed
+        run: |
+          git config user.name "axn-pulse-bot"
+          git config user.email "info@synergyaxn.com"
+          git add osint/data/cams.json
+          # A quiet week moves no camera, which is normal rather than a failure
+          if git diff --cached --quiet; then
+            echo "No camera moved this week."
+            exit 0
+          fi
+          git commit -m "Refresh the webcam catalogue from its authorities"
+          # Two jobs and a laptop all push here, so take whatever landed first
+          git pull --rebase
+          git push

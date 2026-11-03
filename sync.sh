@@ -35,14 +35,15 @@ echo "  ssaidurr/osint_socialmedia    → $(git rev-parse --short HEAD)"
 # deployed forever. Everything excluded is left untouched on the far side, so the mirror keeps
 # its own secrets and its runtime caches.
 #
-# series.json is excluded because both repositories build their own every morning. Copying
-# one over the other changed nothing a reader would notice and made every push collide with
-# whichever job had run first.
+# series.json and cams.json are excluded because both repositories build their own, on their
+# own schedule. Copying one over the other changed nothing a reader would notice and made every
+# push collide with whichever job had run first.
 rsync -a --delete \
   --exclude='/.git/' \
   --exclude='/.venv/' \
   --exclude='/data/' \
   --exclude='/osint/data/series.json' \
+  --exclude='/osint/data/cams.json' \
   --exclude='/.streamlit/secrets.toml' \
   --exclude='/components/globe/frames/' \
   --exclude='__pycache__/' \
