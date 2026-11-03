@@ -1,2 +1,11 @@
 cd "/Users/macmini/Documents/coding Project/osint_socialmedia"
 .venv/bin/streamlit run dashboard.py
+
+
+
+Website-er button	Link
+Event analysis	https://<app>/?layers=event
+News	https://<app>/?layers=news
+Security	https://<app>/?layers=security
+Weather	https://<app>/?layers=weather
+Infrastructure	https://<app>/?layers=infrastructure
