@@ -23,12 +23,13 @@ CHUNK = 64 * 1024
 CAP = 8_000_000  # a feed larger than this is a feed we have misunderstood
 
 
-def get(url: str, budget: float = 8.0, *, headers: dict | None = None,
-        params: dict | None = None, cap: int = CAP) -> bytes | None:
-    """The body of `url`, or None if it did not arrive within `budget` seconds.
+def fetch(url: str, budget: float = 8.0, *, headers: dict | None = None,
+          params: dict | None = None, cap: int = CAP) -> tuple[bytes | None, int]:
+    """(body, HTTP status). The body is None unless it arrived whole, within `budget` seconds.
 
     `budget` covers the whole exchange — connect, first byte and the body together — which is
-    the promise the caller actually needs to make to the page it is drawing.
+    the promise the caller actually needs to make to the page it is drawing. A status of 0 is a
+    network error, and 408 is our own verdict: the far end was still talking when time ran out.
     """
     deadline = time.monotonic() + budget
     sent = dict(headers or {})
@@ -38,17 +39,22 @@ def get(url: str, budget: float = 8.0, *, headers: dict | None = None,
                              timeout=(min(4.0, budget), budget))
         if reply.status_code != 200:
             reply.close()
-            return None
+            return None, reply.status_code
         body = bytearray()
         # iter_content undoes any content-encoding for us, so these are the real bytes
         for chunk in reply.iter_content(CHUNK):
             body += chunk
             if time.monotonic() > deadline or len(body) > cap:
                 reply.close()
-                return None
-        return bytes(body)
+                return None, 408
+        return bytes(body), 200
     except Exception:
-        return None
+        return None, 0
+
+
+def get(url: str, budget: float = 8.0, **kw) -> bytes | None:
+    """`fetch` for the callers that only want the body."""
+    return fetch(url, budget, **kw)[0]
 
 
 def json(url: str, budget: float = 8.0, **kw):

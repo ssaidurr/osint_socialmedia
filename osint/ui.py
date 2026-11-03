@@ -9,11 +9,10 @@ import gzip
 import os
 
 import pandas as pd
-import requests
 import streamlit as st
 import streamlit.components.v1 as components
 
-from osint import db
+from osint import db, http
 from osint.analyzer import CATEGORIES
 from osint.config import load_config
 
@@ -56,12 +55,13 @@ def fetch_remote(path: str, version: str = "") -> tuple[bytes | None, int]:
     headers = {"Accept": "application/vnd.github.raw+json"}
     if token := _secret("GITHUB_TOKEN"):  # required for private repos
         headers["Authorization"] = f"Bearer {token}"
-    try:
-        r = requests.get(f"https://api.github.com/repos/{REMOTE_REPO}/contents/{path}", headers=headers,
-                         params={"ref": _secret("GITHUB_DATA_BRANCH") or "data"}, timeout=30)
-    except requests.RequestException:
-        return None, 0
-    return (r.content if r.status_code == 200 else None), r.status_code
+    # The database is the one thing the page cannot do without, so it gets a generous budget —
+    # but a budget, not a `timeout`. `timeout` bounds the silence between two bytes, not the
+    # exchange, so a stalled 18 MB download satisfies it indefinitely and the page never paints.
+    return http.fetch(f"https://api.github.com/repos/{REMOTE_REPO}/contents/{path}", 90,
+                      headers=headers,
+                      params={"ref": _secret("GITHUB_DATA_BRANCH") or "data"},
+                      cap=120_000_000)
 
 
 @st.cache_data(ttl=300, show_spinner=False)
@@ -77,13 +77,10 @@ def data_version() -> str:
     if token := _secret("GITHUB_TOKEN"):
         headers["Authorization"] = f"Bearer {token}"
     branch = _secret("GITHUB_DATA_BRANCH") or "data"
-    try:
-        r = requests.get(f"https://api.github.com/repos/{REMOTE_REPO}/commits/{branch}",
-                         headers=headers, timeout=15)
-        if r.status_code == 200:
-            return r.json().get("sha", "unknown")
-    except (requests.RequestException, ValueError):
-        pass
+    head = http.json(f"https://api.github.com/repos/{REMOTE_REPO}/commits/{branch}", 15,
+                     headers=headers)
+    if isinstance(head, dict):
+        return head.get("sha", "unknown")
     return "unknown"          # fall through to a normal fetch rather than block the dashboard
 
 

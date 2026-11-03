@@ -2,7 +2,13 @@
 
 # Dashboard (streamlit run dashboard.py)
 pandas>=2.0
-streamlit>=1.50
+# Pinned, not floated. Streamlit serves its front end as hashed JavaScript chunks, and the
+# hashes change with the version — so a deploy that quietly installed a different Streamlit
+# left every open tab asking for filenames the new container had never heard of, and the page
+# died with "Failed to fetch dynamically imported module". Pinning also means the version we
+# test against here is the version that runs there. The wheel is py3-none-any, so this installs
+# whatever Python Streamlit Cloud happens to be on.
+streamlit==1.63.0
 gspread>=6.0
 google-auth>=2.0
 altair>=5.0
