@@ -11,7 +11,7 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
-from osint import (countries, feeds, gate, geo, layers as static_layers, live, panels,
+from osint import (countries, feeds, gate, geo, layers as static_layers, live, panels, themes,
                    places, weather_tiles)
 from osint.config import TICKETS_DIR, load_config, to_local
 from osint.globe import drawable_countries, globe
@@ -628,14 +628,38 @@ GLOBE_HEIGHT = PANEL_HEIGHT - 112        # the head line and the source caption 
 # The presets, as a row of buttons over the map. One lights up only while the ticks are
 # exactly its own: hand-pick an extra layer and it goes out, because a lit chip that no longer
 # describes the map would be worse than no chip at all.
+#
+# A lit chip also narrows the panel beside the map to its own stories (osint/themes.py), for
+# the world or for the picked country. Pressing it again goes back to the opening layers and
+# to every story, so there is always a way back without hunting through the ticks.
+active_theme = None
 chip_cols = st.columns(len(PRESETS))
 for (slug, (label, wanted)), column in zip(PRESETS.items(), chip_cols):
     exact = set(wanted) == keys
+    if exact:
+        active_theme = slug
     if column.button(label, key=f"preset_{slug}", width="stretch",
                      type="primary" if exact else "secondary",
-                     help=f"Show the {label.lower()} layers and nothing else"):
-        st.session_state["globe_layers"] = list(wanted)
+                     help=(f"Back to every story and the opening layers" if exact else
+                           f"Show the {label.lower()} layers, and only {label.lower()} news "
+                           f"beside the map — worldwide, or for the picked country")):
+        st.session_state["globe_layers"] = ([LAYERS[n] for n in DEFAULT_LAYERS] if exact
+                                            else list(wanted))
         st.rerun()
+
+# What the panel beside the map reads: every story, or only the lit chip's
+theme_label = PRESETS[active_theme][0] if active_theme else None
+theme_df = themes.select(df, active_theme)
+theme_located = theme_df[theme_df["country"].notna()]
+theme_ranked = ranked if theme_df is df else (
+    theme_located.groupby("country").size().rename("total").reset_index()
+    .rename(columns={"country": "iso2"}).sort_values("total", ascending=False))
+
+
+def themed(title: str) -> str:
+    """A panel title that says which chip it is answering for."""
+    return f"{title} · {theme_label}" if theme_label else title
+
 
 left, right = st.columns([1.9, 1])
 
@@ -762,10 +786,10 @@ with right.container(border=True, height=PANEL_HEIGHT):
                 st.markdown(f'[Open the source report]({hit["url"]})')
             # what our own collection is saying in the same country
             if hit.get("cc"):
-                alongside = located[located["country"] == hit["cc"]]
+                alongside = theme_located[theme_located["country"] == hit["cc"]]
                 if not alongside.empty:
                     st.markdown('<div class="axn-head" style="margin-top:.9rem">'
-                                '<span class="axn-label">Our news from this country</span>'
+                                f'<span class="axn-label">{themed("Our news from this country")}</span>'
                                 f'<span class="axn-label right">{len(alongside):,} items</span></div>'
                                 + headline_rows(alongside, 5), unsafe_allow_html=True)
         if st.button("Clear selection"):
@@ -812,21 +836,25 @@ with right.container(border=True, height=PANEL_HEIGHT):
     elif not picked:
         # Nothing picked yet, so the panel answers for the whole world. An empty panel beside a
         # full globe reads as something broken; this reads as the global view it is.
-        world_negative = df[df["sentiment"] == "negative"]
-        st.markdown(panels.head("Worldwide", range_name.lower(), status=("live", "live"),
+        world = theme_df
+        world_negative = world[world["sentiment"] == "negative"]
+        st.markdown(panels.head(themed("Worldwide"), range_name.lower(), status=("live", "live"),
                                 dense=False,
                                 tip="This monitor's own collection in the chosen range. Click "
-                                    "a country on the globe to narrow everything to it.")
+                                    "a country on the globe to narrow everything to it, or a "
+                                    "button above the map to one kind of news.")
                     + '<div class="axn-stats">' + "".join(
                         f'<div><span class="axn-label">{label}</span><span class="v">{value}</span></div>'
                         for label, value in (
-                            ("items", f"{len(df):,}"),
-                            ("negative", f"{len(world_negative) / len(df):.0%}"),
+                            ("items", f"{len(world):,}"),
+                            ("negative", f"{len(world_negative) / len(world):.0%}" if len(world) else "—"),
                             ("avg severity",
                              f"{world_negative['severity'].mean():.1f}" if len(world_negative) else "—"),
                         )) + "</div>", unsafe_allow_html=True)
 
-        split = df["sentiment"].value_counts().reindex(SENTIMENTS).fillna(0).reset_index()
+        if world.empty:
+            st.caption(f"No {theme_label.lower()} news in the selected range.")
+        split = world["sentiment"].value_counts().reindex(SENTIMENTS).fillna(0).reset_index()
         split.columns = ["sentiment", "count"]
         st.altair_chart(
             alt.Chart(split).mark_bar(cornerRadius=4, height={"band": 0.6}).encode(
@@ -848,8 +876,8 @@ with right.container(border=True, height=PANEL_HEIGHT):
                         f'is about</span></div><div class="axn-bars">{bars}</div>',
                         unsafe_allow_html=True)
 
-        if not ranked.empty:
-            busiest = ranked.head(6)
+        if not theme_ranked.empty:
+            busiest = theme_ranked.head(6)
             rows = "".join(
                 f'<div class="bar-row"><span class="name">'
                 f'{html_lib.escape(countries.NAMES.get(r.iso2, r.iso2))}</span>'
@@ -859,21 +887,22 @@ with right.container(border=True, height=PANEL_HEIGHT):
                 for r in busiest.itertuples())
             st.markdown('<div class="axn-head" style="margin-top:.9rem">'
                         '<span class="axn-label">Busiest countries</span>'
-                        f'<span class="axn-label right">{len(ranked)} with news</span></div>'
+                        f'<span class="axn-label right">{len(theme_ranked)} with news</span></div>'
                         f'<div class="axn-bars">{rows}</div>', unsafe_allow_html=True)
 
         st.markdown('<div class="axn-head" style="margin-top:.9rem">'
                     '<span class="axn-label">Latest</span>'
                     '<span class="axn-label right">click the map for one place</span></div>'
-                    + headline_rows(df, 6), unsafe_allow_html=True)
+                    + headline_rows(world, 6), unsafe_allow_html=True)
     else:
-        one = located[located["country"] == picked]
+        one = theme_located[theme_located["country"] == picked]
         name = countries.NAMES.get(picked, picked)
-        st.markdown(panels.head(name, picked, status=("live", "live"), dense=False,
+        st.markdown(panels.head(themed(name), picked, status=("live", "live"), dense=False,
                                 tip="This monitor's own collection from this country, in the "
                                     "chosen range."), unsafe_allow_html=True)
         if one.empty:
-            st.caption("No items from this country in the selected range.")
+            st.caption(f"No {theme_label.lower() + ' ' if theme_label else ''}items from this "
+                       "country in the selected range.")
         else:
             negative = one[one["sentiment"] == "negative"]
             stats = [("items", f"{len(one):,}"),
