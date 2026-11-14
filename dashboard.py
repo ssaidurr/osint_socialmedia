@@ -101,15 +101,46 @@ search = st.text_input("Search", placeholder="keywords in the headline, text or 
 hours = RANGES[range_name]
 now = pd.Timestamp.now(tz=TZ).tz_localize(None)
 
-# ─── The brief, for whichever range is selected ───────────────────────────────
+# ─── The brief and the odds, two tabs of one box ──────────────────────────────
+# Two readings of the same moment: what has happened, written by the analyzer, and what people
+# are betting will happen next. They answer each other, so they share one box at the top of the
+# page rather than sitting a screen apart — the prediction panel used to be twenty panels down,
+# where nobody scrolled to find it.
+#
+# The odds tab follows whatever country is selected, but it is drawn *above* the globe, so it
+# reads the selection left over from the last run rather than this run's answer. That is the
+# only honest thing available this early in the page, and it costs nothing: picking a country
+# reruns the page, so the tab is right by the time anyone reads it.
+def _early_country() -> str | None:
+    """Whichever country the globe or the picker had selected when the page last drew."""
+    pick = st.session_state.get("globe_pick")
+    if not isinstance(pick, str):
+        return None
+    if pick.startswith("city:"):
+        return pick[5:].partition("|")[2] or None
+    return pick if len(pick) == 2 else None
+
+
 with st.container(border=True):
-    st.markdown(f"#### 📰 At a glance — {range_name.lower()}")
-    brief = briefs.get(hours)
-    if brief:
-        st.markdown(brief["text"])
-        st.caption(f"Written {to_local(brief['created_at'], cfg)}")
-    else:
-        st.caption("No brief for this range yet — one is written on the next monitor run.")
+    brief_tab, odds_tab = st.tabs(["📰 AI brief", "🎲 Predictions"])
+    with brief_tab:
+        st.markdown(f"#### 📰 At a glance — {range_name.lower()}")
+        brief = briefs.get(hours)
+        if brief:
+            st.markdown(brief["text"])
+            st.caption(f"Written {to_local(brief['created_at'], cfg)}")
+        else:
+            st.caption("No brief for this range yet — one is written on the next monitor run.")
+    with odds_tab:
+        # The same panel the picker can also put further down the page, drawn with the world
+        # (or the selected country) as its scope. `news` is unused by it; it is passed because
+        # a Scope is a Scope.
+        early_cc = _early_country()
+        panels.PANELS["predict"].draw(panels.Scope(
+            cc=early_cc,
+            name=countries.NAMES.get(early_cc, early_cc) if early_cc else "Worldwide",
+            news=items, world_news=items, range_name=range_name,
+        ))
 df = items[(items["ts"] >= now - pd.Timedelta(hours=hours)) & items["source_type"].isin(types)]
 if picked_countries:
     df = df[df["country"].isin(picked_countries)]
@@ -991,9 +1022,12 @@ scope = panels.Scope(
 )
 
 PANEL_LABELS = {f"{p.group} · {p.title}": key for key, p in panels.PANELS.items()}
+# Predictions is deliberately absent: it now has a tab of its own at the top of the page, and
+# a panel that draws the same seven questions a second time further down is just repetition.
+# The picker still offers it, for anyone who wants it beside the globe.
 OPENING = ["News · Live intelligence", "News · Threat timeline", "Risk · Instability",
            "Money · News ↔ markets", "Live · Live news TV", "Live · Live webcams",
-           "Money · Markets", "Money · Metals & materials", "Money · Predictions",
+           "Money · Markets", "Money · Metals & materials",
            "Risk · Live hazards", "News · What it is about"]
 st.session_state.setdefault("globe_panels", OPENING)
 
