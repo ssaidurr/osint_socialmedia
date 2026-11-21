@@ -41,13 +41,17 @@ MIN_POP_WITHOUT_COUNTRY = 500_000
 
 @lru_cache(maxsize=1)
 def _index() -> dict[str, list[tuple]]:
-    """lowercase city name -> [(name, country, lat, lng, population), …], biggest first."""
+    """lowercase city name -> [(name, country, lat, lng, population, state), …], biggest first.
+
+    The sixth column is the admin-1 division — a state, province, oblast or governorate
+    depending on the country — and it is what the drill-down puts between nation and city.
+    """
     index: dict[str, list[tuple]] = {}
-    for name, country, lat, lng, pop in json.loads(CITIES.read_text()):
+    for name, country, lat, lng, pop, *rest in json.loads(CITIES.read_text()):
         key = name.lower()
         if len(key) < 4 or key in AMBIGUOUS:
             continue
-        index.setdefault(key, []).append((name, country, lat, lng, pop))
+        index.setdefault(key, []).append((name, country, lat, lng, pop, rest[0] if rest else ""))
     for rows in index.values():
         rows.sort(key=lambda r: -r[4])
     return index
@@ -58,7 +62,7 @@ CANDIDATE = re.compile(r"\b[A-Z][\w'’-]+(?:[ -][A-Z][\w'’-]+){0,2}")
 
 
 def find(text: str, country: str | None = None) -> tuple | None:
-    """The city a piece of text is about, as (name, country, lat, lng), or None.
+    """The city a piece of text is about, as (name, country, lat, lng, state), or None.
 
     A city in the item's own country always wins; among the rest, the biggest does. Only the
     first few candidates are considered, because a headline names its subject early.
@@ -78,13 +82,13 @@ def find(text: str, country: str | None = None) -> tuple | None:
                 if country:
                     local = [r for r in rows if r[1] == country]
                     if local:
-                        return local[0][0], local[0][1], local[0][2], local[0][3]
+                        return local[0][0], local[0][1], local[0][2], local[0][3], local[0][5]
                     continue          # named a city, but not one in the country we were given
                 if rows[0][4] < MIN_POP_WITHOUT_COUNTRY:
                     continue
                 if best is None or rows[0][4] > best[4]:
                     best = rows[0]
-    return (best[0], best[1], best[2], best[3]) if best else None
+    return (best[0], best[1], best[2], best[3], best[5]) if best else None
 
 
 def _text(value) -> str:
@@ -108,8 +112,8 @@ def locate(records: tuple) -> list[dict]:
         hit = find(_text(title), _text(country) or None) or find(_text(summary), _text(country) or None)
         if not hit:
             continue
-        name, city_country, lat, lng = hit
-        out.append({"lat": lat, "lng": lng, "city": name, "country": city_country,
+        name, city_country, lat, lng, state = hit
+        out.append({"lat": lat, "lng": lng, "city": name, "country": city_country, "state": state,
                     "title": _text(title) or _text(summary), "sentiment": sentiment,
                     "severity": None if severity is None else float(severity),
                     "category": _text(category),
@@ -123,7 +127,7 @@ def biggest_city(country: str) -> tuple | None:
     itself when something has to be asked about a single point."""
     best = None
     for rows in _index().values():
-        for name, cc, lat, lng, pop in rows:
+        for name, cc, lat, lng, pop, _state in rows:
             if cc == country and (best is None or pop > best[4]):
                 best = (name, cc, lat, lng, pop)
     return (best[0], best[2], best[3]) if best else None

@@ -18,6 +18,23 @@
   }
   #tip .n { font-family: "Geist Mono", ui-monospace, monospace; }
   #tip .dim { color: #8a919c; }
+  /* The significance popup. A dot's tooltip carries a reading, a shape and a headline, so it
+     stops being one line of text and becomes a small card — hence the blocks, and hence the
+     wrapping, which the one-line tooltip above it still does not want. */
+  #tip .sig {
+    display: block; font-family: "Geist Mono", ui-monospace, monospace;
+    font-size: 1.5rem; line-height: 1.05; color: #f87171; margin-top: .3rem;
+  }
+  #tip .sig.cool { color: #5ee6ff; }
+  #tip .cap {
+    display: block; font-size: .6rem; letter-spacing: .09em; text-transform: uppercase;
+    color: #8a919c; margin-top: .1rem;
+  }
+  #tip .spark { display: block; margin: .4rem 0 .1rem; }
+  #tip .cut {
+    display: block; white-space: normal; max-width: 220px; color: #c6ccd4;
+    margin-top: .3rem; font-size: .74rem; line-height: 1.35;
+  }
   #hint {
     position: absolute; left: 14px; bottom: 12px; color: #8a919c; font-size: .68rem;
     letter-spacing: .14em; text-transform: uppercase;
@@ -30,6 +47,21 @@
   }
   #legend .ramp { width: 108px; height: 6px; border-radius: 3px;
                   background: linear-gradient(90deg, #5ee6ff, #8b7cff, #f87171); }
+  /* What a dot's size means, said on the map itself. A control above the map can only be
+     read by someone who already went looking for it; this is in the corner the reader is
+     already looking at when they wonder why one circle is bigger than another. */
+  #sizekey { display: flex; align-items: center; gap: .35rem; }
+  #sizekey i {
+    display: inline-block; border-radius: 50%; background: #5ee6ff33;
+    border: 1px solid #5ee6ff; flex: none;
+  }
+  /* Two circles, not three, and each one labelled with the real number it stands for. A row
+     of nameless circles getting bigger says only that size means something. */
+  #sizekey i.sm { width: 6px; height: 6px; }
+  #sizekey i.lg { width: 15px; height: 15px; }
+  #sizekey b { font-weight: 400; color: #c6ccd4; }
+  #sizekey .word { color: #8a919c; }
+  #legend .bar { width: 1px; height: 13px; background: #262c34; }
   #keys {
     position: absolute; left: 14px; top: 12px; width: 236px; max-height: calc(100% - 110px);
     display: flex; flex-direction: column; overflow: hidden;
@@ -94,6 +126,8 @@
 <div id="tip"></div>
 <div id="hint">drag to spin · click a country</div>
 <div id="legend">
+  <span id="sizekey"><span class="word">dot size</span><i class="sm"></i><b class="lo"></b><i class="lg"></i><b class="hi"></b></span>
+  <span class="bar"></span>
   <span>low</span><span class="ramp"></span><span>negative</span>
 </div>
 <div id="keys"></div>
@@ -774,6 +808,12 @@ function paintIcons() {
   iconsReady = sprites.children.length > 0;
 }
 
+function halo(colour) {
+  // The marker's own colour at a fraction of its opacity, so the halo can never disagree with
+  // the glyph sitting on it.
+  return String(colour).replace(/rgba\(([^)]+),\s*[\d.]+\)/, "rgba($1,0.45)");
+}
+
 function paintMarkers() {
   if (!globe) return;
   globe
@@ -781,10 +821,17 @@ function paintMarkers() {
     .pointLat("lat").pointLng("lng")
     .pointAltitude(0.012)
     .pointRadius(d => d.r)
-    // With icons drawn over them the discs are only there to be hovered and clicked: three
+    // With icons drawn over them the discs were only there to be hovered and clicked: three
     // raycasts geometry, not pixels, so an invisible disc is still a target. If three never
     // loaded there are no icons, and the discs go back to being the marker.
-    .pointColor(d => (iconsReady ? "rgba(0,0,0,0)" : d.color))
+    //
+    // Except on the layers whose size *means* something. The icon sprite is one fixed size
+    // for every marker, so a fully transparent disc made the dot-size switch above the map
+    // change a number nobody could see — a control over an invisible thing. Those discs come
+    // back as a faint halo: the glyph stays what you read, the halo around it is how much or
+    // how bad. Everything else keeps the clear disc, because a halo on a layer whose size is
+    // constant would be noise claiming to be information.
+    .pointColor(d => (iconsReady ? (d.sized ? halo(d.color) : "rgba(0,0,0,0)") : d.color))
     .pointsMerge(false)
     .pointsTransitionDuration(260)
     .pointResolution(24)
@@ -982,6 +1029,13 @@ function render(args) {
   paths = args.paths || [];
   layerList = args.layers || [];
   dim = !!args.dim;
+  const key = document.getElementById("sizekey");
+  if (key) {
+    const sz = args.sizing || {};
+    key.querySelector(".word").textContent = sz.word ? sz.word + ":" : "dot size";
+    key.querySelector(".lo").textContent = sz.low || "small";
+    key.querySelector(".hi").textContent = sz.high || "large";
+  }
   if (!globe) {
     build(height);
     fetch("countries.geojson")

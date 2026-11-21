@@ -305,6 +305,53 @@ ALIASES: dict[str, str] = {
 }
 
 
+# ─── The level above a country ────────────────────────────────────────────────
+# The UN M49 sub-regions, which is the standard everyone from the World Bank to WHO reports
+# against, so a reader who knows "Western Asia" from one of those knows it here too. Written
+# as region -> members because that is how it is checked and corrected; REGION_OF inverts it
+# once at import.
+REGIONS: dict[str, tuple[str, ...]] = {
+    "Northern Africa": ("DZ", "EG", "LY", "MA", "SD", "TN", "EH"),
+    "Sub-Saharan Africa": (
+        "AO", "BF", "BI", "BJ", "BW", "CD", "CF", "CG", "CI", "CM", "CV", "DJ", "ER", "ET",
+        "GA", "GH", "GM", "GN", "GQ", "GW", "KE", "KM", "LR", "LS", "MG", "ML", "MR", "MU",
+        "MW", "MZ", "NA", "NE", "NG", "RE", "RW", "SC", "SH", "SL", "SN", "SO", "SS", "ST",
+        "SZ", "TD", "TG", "TZ", "UG", "YT", "ZA", "ZM", "ZW", "IO"),
+    "Northern America": ("BM", "CA", "GL", "PM", "US"),
+    "Latin America & Caribbean": (
+        "AG", "AI", "AR", "AW", "BB", "BL", "BO", "BQ", "BR", "BS", "BZ", "CL", "CO", "CR",
+        "CU", "CW", "DM", "DO", "EC", "FK", "GD", "GF", "GP", "GT", "GY", "HN", "HT", "JM",
+        "KN", "KY", "LC", "MF", "MQ", "MS", "MX", "NI", "PA", "PE", "PR", "PY", "SR", "SV",
+        "SX", "TC", "TT", "UY", "VC", "VE", "VG", "VI"),
+    "Central Asia": ("KG", "KZ", "TJ", "TM", "UZ"),
+    "Eastern Asia": ("CN", "HK", "JP", "KP", "KR", "MN", "MO", "TW"),
+    "South-Eastern Asia": ("BN", "ID", "KH", "LA", "MM", "MY", "PH", "SG", "TH", "TL", "VN"),
+    "Southern Asia": ("AF", "BD", "BT", "IN", "IR", "LK", "MV", "NP", "PK"),
+    "Western Asia": (
+        "AE", "AM", "AZ", "BH", "CY", "GE", "IL", "IQ", "JO", "KW", "LB", "OM", "PS", "QA",
+        "SA", "SY", "TR", "YE"),
+    "Eastern Europe": ("BG", "BY", "CZ", "HU", "MD", "PL", "RO", "RU", "SK", "UA"),
+    "Northern Europe": (
+        "AX", "DK", "EE", "FI", "FO", "GB", "GG", "IE", "IM", "IS", "JE", "LT", "LV", "NO",
+        "SE", "SJ"),
+    "Southern Europe": (
+        "AD", "AL", "BA", "ES", "GI", "GR", "HR", "IT", "ME", "MK", "MT", "PT", "RS", "SI",
+        "SM", "VA", "XK"),
+    "Western Europe": ("AT", "BE", "CH", "DE", "FR", "LI", "LU", "MC", "NL"),
+    "Oceania": (
+        "AS", "AU", "CK", "FJ", "FM", "GU", "KI", "MH", "MP", "NC", "NF", "NR", "NU", "NZ",
+        "PF", "PG", "PN", "PW", "SB", "TK", "TO", "TV", "VU", "WF", "WS", "CC", "CX", "UM"),
+    "Antarctica": ("AQ", "BV", "GS", "HM", "TF"),
+}
+
+REGION_OF: dict[str, str] = {code: region for region, codes in REGIONS.items() for code in codes}
+
+
+def region(code: str | None) -> str:
+    """The region a country sits in, or "Elsewhere" for one this table has not placed."""
+    return REGION_OF.get((code or "").upper(), "Elsewhere")
+
+
 @lru_cache(maxsize=1)
 def _name_pattern() -> tuple:
     """One regular expression over every country name we know, longest first.

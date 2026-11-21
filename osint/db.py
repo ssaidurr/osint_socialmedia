@@ -65,6 +65,14 @@ CREATE TABLE IF NOT EXISTS digests (  -- the latest brief per window (24h, 7d, .
     model        TEXT,              -- NULL when written without an LLM
     facts        TEXT NOT NULL      -- JSON: the counts the brief was written from
 );
+
+CREATE TABLE IF NOT EXISTS digest_log (  -- every brief ever written, newest kept alongside
+    created_at   TEXT NOT NULL,
+    window_hours REAL NOT NULL,
+    text         TEXT NOT NULL,
+    model        TEXT,
+    PRIMARY KEY (created_at, window_hours)
+);
 """
 
 
@@ -147,6 +155,17 @@ def save_digest(conn: sqlite3.Connection, hours: float, text: str, model: str | 
              created_at = excluded.created_at, text = excluded.text,
              model = excluded.model, facts = excluded.facts""",
         (float(hours), now_utc(), text, model, json.dumps(facts, ensure_ascii=False)),
+    )
+    # The table above holds one row per window and overwrites it on every run, which is what
+    # the dashboard's brief panel wants and is also why there was no history to show: every
+    # earlier brief had already been written over. This keeps a copy. It only ever grows by a
+    # few hundred characters an hour, and a situational report nobody can look back at is not
+    # much of a report.
+    conn.execute(
+        """INSERT INTO digest_log (created_at, window_hours, text, model) VALUES (?, ?, ?, ?)
+           ON CONFLICT(created_at, window_hours) DO UPDATE SET
+             text = excluded.text, model = excluded.model""",
+        (now_utc(), float(hours), text, model),
     )
     conn.commit()
 

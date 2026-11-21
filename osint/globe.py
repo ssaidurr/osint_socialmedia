@@ -28,7 +28,7 @@ def globe(rows: list[dict], selected: str | None = None, height: int = 560,
           dim: bool = False, weather: list[dict] | None = None,
           view: str = "3d", surface: str = "map",
           layers: list[dict] | None = None, paths: list[dict] | None = None,
-          key: str = "globe"):
+          sizing: dict | None = None, key: str = "globe"):
     """Draw it, and return what was last clicked.
 
     The answer is an ISO-2 country code, "city:<name>|<cc>", "event:<kind>|<lat>|<lng>", or one
@@ -37,10 +37,14 @@ def globe(rows: list[dict], selected: str | None = None, height: int = 560,
     `markers` are the dots laid over the countries and `paths` the lines drawn under them — each
     already carries the colour and size it should be drawn at. `weather` is the loop of
     transparent textures that goes over the surface, not instead of it. `layers` is the panel inside the
-    map: every layer there is, whether it is on, and what it found. `sun` is where the sun is
-    overhead, which the night side is cast from.
+    map: every layer there is, whether it is on, and what it found. `sizing` is {word, low, high} — what a
+    dot's size currently means and the smallest and largest value in this window — printed in
+    the key so the map explains itself rather than relying on a control above it that a reader
+    may never have touched. `sun` is where
+    the sun is overhead, which the night side is cast from.
     """
     return _component(rows=rows, selected=selected, height=height,
                       markers=markers or [], sun=sun, dim=dim,
                       weather=weather or [], view=view, surface=surface,
-                      layers=layers or [], paths=paths or [], key=key, default=None)
+                      layers=layers or [], paths=paths or [], sizing=sizing or {},
+                      key=key, default=None)

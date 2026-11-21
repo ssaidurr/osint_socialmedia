@@ -343,29 +343,63 @@ def _metals(scope: Scope) -> None:
     st.markdown(tiles(rows), unsafe_allow_html=True)
 
 
+# Where the prediction filters are kept. The panel reads them; the page that draws the filter
+# row writes them. Keeping the widgets out of the panel is what lets the panel be drawn twice —
+# once in its tab at the top of the page, once in the grid under the globe — without Streamlit
+# refusing the second copy for reusing a widget's key.
+FILTER_CATEGORY = "predict_category"
+FILTER_COUNTRY = "predict_country"
+FOLLOW = "follow"          # the country selector's way of saying "whatever the globe says"
+WORLD = "world"            # ...and its way of saying "every country, whatever the globe says"
+
+
+def predict_filters() -> tuple[str | None, str | None, bool]:
+    """(category, country, following) as the filter row last left them.
+
+    Worldwide needs a word of its own rather than an empty one: without it there is no way to
+    say "ignore the globe and show me everything", because empty would read as "follow it".
+    """
+    category = st.session_state.get(FILTER_CATEGORY) or None
+    country = st.session_state.get(FILTER_COUNTRY) or FOLLOW
+    return category, (None if country in (FOLLOW, WORLD) else country), country == FOLLOW
+
+
 @panel("predict", "Predictions", "Money")
 def _predict(scope: Scope) -> None:
-    from . import predict
+    from . import countries, predict
 
-    rows = predict.questions(scope.cc, limit=7)
-    st.markdown(head("Predictions", "polymarket", status=("live", "15m") if rows else ("off", "none"),
+    category, chosen, following = predict_filters()
+    cc = scope.cc if following else chosen
+    rows = predict.questions(cc, limit=10, category=category)
+
+    where = countries.NAMES.get(cc, cc) if cc else "worldwide"
+    st.markdown(head("Predictions", " · ".join(filter(None, (category or "all subjects", where))).lower(),
+                     status=("live", "15m") if rows else ("off", "none"),
                      count=len(rows) or None, shut=scope.shut(),
-                     tip="Polymarket's open markets, ordered by money traded. Questions the "
-                         "crowd has already settled — above 97% — are left out, because a "
-                         "market that certain carries no news."), unsafe_allow_html=True)
+                     tip="Polymarket's open markets, grouped by the subject and country tags "
+                         "Polymarket itself puts on them, ordered by money traded. A race is "
+                         "one line showing its front-runner, not one line per candidate. "
+                         "Questions the crowd has already settled — above 97% — are left out, "
+                         "because a market that certain carries no news."), unsafe_allow_html=True)
     if not rows:
-        return nothing(f"No open market names {scope.name}." if not scope.worldwide
-                       else "Polymarket is not answering.")
+        asked = " ".join(filter(None, (category and category.lower(), cc and where)))
+        return nothing(f"No open market on {asked}." if asked else "Polymarket is not answering.")
     out = []
     for row in rows:
         leading_no = row["outcome"].strip().lower() in ("no", "down", "false")
+        # A race shows its front-runner, so say so — "26% Jon Ossoff" out of context reads like
+        # the whole question rather than one of a hundred and twenty-eight names on the ballot.
+        lead = f'{row["chance"]:.0%} {row["outcome"]}' + (
+            f" of {row['choices']}" if row["choices"] > 2 else "")
+        tags = [row["category"]] + [countries.NAMES.get(c, c) for c in row["countries"][:2]]
         out.append(
             f'<div class="row"><span class="q">'
             f'<a href="{escape(row["url"])}" target="_blank">{escape(row["question"])}</a></span>'
             f'<span class="track"><span class="fill{" no" if leading_no else ""}" '
             f'style="width:{row["chance"]:.0%}"></span></span>'
-            f'<span class="meta"><span>{row["chance"]:.0%} {escape(row["outcome"])}</span>'
+            f'<span class="meta"><span>{escape(lead)}</span>'
             f'<span>{dollars(row["volume"])}</span>'
+            f'<span>{escape(" · ".join(tags))}</span>'
             f'<span>ends {escape(row["ends"])}</span></span></div>')
     st.markdown(f'<div class="axn-odds">{"".join(out)}</div>', unsafe_allow_html=True)
 
@@ -523,7 +557,7 @@ def _hazards(scope: Scope) -> None:
     if worst:
         lines = "".join(
             f'<div class="row"><div class="meta"><span>{escape(mark.get("ts", ""))}</span></div>'
-            f'<div class="head">{escape(mark.get("title", ""))} — {escape(mark.get("detail", ""))}'
+            f'<div class="head">{escape(mark.get("title", ""))} — {escape(mark.get("summary") or mark.get("detail", ""))}'
             f'</div>{tags([(str(mark.get("level", "")), "alert" if str(mark.get("level")) == "red" else "warn")])}'
             f'</div>' for mark in worst[:4])
         st.markdown(head("Rated orange or red", count=len(worst))
@@ -626,6 +660,64 @@ def _topics(scope: Scope) -> None:
     st.markdown(head("Where it came from", count=int(kinds.size))
                 + bars([(str(k).replace("_", " "), int(n), f"{int(n):,}")
                         for k, n in kinds.head(5).items()]), unsafe_allow_html=True)
+
+
+@panel("countries", "Countries by volume", "News")
+def _countries(scope: Scope) -> None:
+    """The ranking the globe is a picture of, and the countries the globe cannot draw.
+
+    This used to sit below the panel grid as a section of its own, which left a band of empty
+    page between the last panel and the table and made the grid look like it had stopped
+    halfway. It is a panel like any other now: it takes a slot, it closes with the same ×, and
+    the picker can put it back.
+    """
+    from . import countries as iso
+    from .globe import drawable_countries
+
+    located = scope.world_news[scope.world_news["country"].notna()]
+    st.markdown(head("Countries by volume", f"{len(located):,} located",
+                     status=("live", "live") if len(located) else ("off", "none"),
+                     count=int(located["country"].nunique()) or None, shut=scope.shut(),
+                     tip="Every country this window's items were placed in, busiest first. "
+                         "The negative share is of that country's own items, not of the "
+                         "window — a country with four items and three bad ones reads 75%."),
+                unsafe_allow_html=True)
+    missing = len(scope.world_news) - len(located)
+    if located.empty:
+        return nothing(f"No country identified in this range yet — all {missing:,} items are "
+                       "world or tech stories the analyzer could not pin to one.")
+
+    ranked = located.groupby("country").agg(
+        total=("id", "size"),
+        negative=("sentiment", lambda col: int((col == "negative").sum())),
+        severity=("severity", "mean"),
+    ).reset_index()
+    ranked["share"] = ranked["negative"] / ranked["total"]
+    ranked["name"] = ranked["country"].map(iso.label)
+    ranked = ranked.sort_values("total", ascending=False)
+
+    st.dataframe(
+        ranked.head(40)[["name", "total", "negative", "share", "severity"]]
+              .assign(severity=lambda d: d["severity"].round(1)),
+        hide_index=True, width="stretch", height=232,
+        column_config={
+            "name": "Country",
+            "total": st.column_config.NumberColumn("Items"),
+            "negative": st.column_config.NumberColumn("Negative"),
+            "share": st.column_config.ProgressColumn("Negative share", min_value=0, max_value=1,
+                                                     format="percent"),
+            "severity": st.column_config.NumberColumn("Avg severity", format="%.1f"),
+        })
+
+    # A country the map cannot draw is still a country with news in it, so it is named here
+    # rather than quietly dropped.
+    undrawable = ranked[~ranked["country"].isin(drawable_countries())]
+    if not undrawable.empty:
+        names = ", ".join(f"{r['name']} ({int(r.total)})" for _, r in undrawable.head(6).iterrows())
+        source(f"Not on the globe — too small for the 110m outlines, or not a country: {names}. "
+               f"{int(undrawable['total'].sum()):,} of {len(located):,} located items.")
+    if missing:
+        source(f"{missing:,} items in this range have no country at all.")
 
 
 @panel("sources", "Publishers", "News")
